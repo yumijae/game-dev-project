@@ -1,0 +1,86 @@
+extends Node
+## EventBus (autoload) - global signal bus for "Huling Kampana".
+## Systems never hold references to each other; they talk through these signals.
+
+# ----------------------------------------------------------------------- time
+signal time_advanced(hour: int, minute: int, formatted: String, progress: float)
+## 12:00 AM - the three Aswang wake up.
+signal midnight_started()
+signal hour_struck(hour: int, aggression_level: int)
+signal aggression_escalated(level: int)
+signal rescue_time_changed(hour: int, minute: int)
+## 5:30 AM, or 3:30 AM once the rooftop SOS went out.
+signal rescue_arrived()
+
+# ---------------------------------------------------------------------- noise
+signal noise_emitted(origin: Vector3, radius: float, noise_type: StringName, source: Node)
+
+# ---------------------------------------------------------------------- scent
+signal scent_level_changed(level: float)
+signal scent_breadcrumb_dropped(crumb: Node3D)
+signal scent_masked(duration: float)
+
+# --------------------------------------------------------------- player stats
+signal stamina_changed(value: float)
+signal panic_changed(value: float, tier: int)
+signal panic_tier_changed(tier: int)
+## Fired when panic crosses one of PlayerStats.PANIC_THRESHOLDS.
+signal panic_threshold_crossed(threshold: int, rising: bool)
+signal shaky_hands_changed(active: bool)
+signal footwear_changed(footwear: int)
+signal bleeding_changed(is_bleeding: bool)
+signal phone_battery_changed(percent: float)
+signal flashlight_toggled(is_on: bool)
+signal phone_raised(is_out: bool)
+## The LED beam hit an exterior jalousie window or a corridor viewing pane.
+signal flashlight_leaked(point: Vector3, surface: Node3D)
+signal player_hidden_changed(is_hidden: bool, spot: Node3D)
+signal player_wounded(source: StringName)
+
+# ------------------------------------------------------------------ inventory
+signal inventory_changed()
+signal item_picked_up(item_id: StringName)
+signal item_used(item_id: StringName)
+signal item_crafted(item_id: StringName)
+signal lana_boiling_changed(is_boiling: bool)
+
+# ---------------------------------------------------------------------- world
+signal door_state_changed(door: Node3D)
+signal door_breached(door: Node3D)
+signal salt_barrier_triggered(barrier: Node3D, aswang: Node3D)
+signal glass_shattered(glass: Node3D, point: Vector3)
+
+# --------------------------------------------------------------------- aswang
+signal aswang_state_changed(aswang_id: StringName, state: StringName)
+signal aswang_alerted(aswang_id: StringName, position: Vector3)
+signal aswang_stunned(aswang_id: StringName, duration: float)
+signal tiktik_berserk(position: Vector3)
+signal balbal_form_changed(form: int)
+signal balbal_mimic_line(door: Node3D, line: String)
+
+# ------------------------------------------------------------------------- ui
+## `actions` is an Array of {"id": StringName, "label": String}.
+signal ui_prompt_changed(actions: Array, selected: int)
+signal ui_subtitle(text: String, duration: float, speaker: StringName)
+signal ui_notification(text: String, duration: float)
+signal ui_channel_started(label: String, duration: float)
+signal ui_channel_progress(ratio: float)
+signal ui_channel_finished(completed: bool)
+signal ui_gasp_prompt(active: bool, window: float)
+signal ui_crafting_toggled(is_open: bool)
+signal ui_peek_changed(is_peeking: bool)
+signal hallucination_started(kind: StringName, position: Vector3)
+
+# ------------------------------------------------------- objectives / endings
+signal objective_updated(objective_id: StringName, text: String, progress: float)
+signal sos_progress_changed(seconds: float, required: float)
+signal sos_sent()
+signal gate_breach_progress(ratio: float)
+signal gate_opened(method: StringName)
+## WARDEN's circuit (server, CCTV, Com Sci Lab docks) lost power. `cause` is
+## &"breaker" (LP-2F main thrown by Juan) or &"ups_empty" (backup battery ran out).
+signal lab_power_cut(cause: StringName)
+## A robot finished rebooting after the update and is now hunting.
+signal robot_online(display_name: String)
+signal game_won(ending_id: StringName, title: String, description: String)
+signal game_lost(cause: String)

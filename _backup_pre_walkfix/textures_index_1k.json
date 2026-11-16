@@ -1,0 +1,167 @@
+{
+ "interior_tiles": {
+  "size_m": [
+   1.8999998569488525,
+   1.8999998569488525
+  ],
+  "maps": {
+   "diff": "res://textures/polyhaven/interior_tiles/interior_tiles_diff_1k.jpg",
+   "nor_gl": "res://textures/polyhaven/interior_tiles/interior_tiles_nor_gl_1k.jpg",
+   "rough": "res://textures/polyhaven/interior_tiles/interior_tiles_rough_1k.jpg"
+  }
+ },
+ "floor_tiles_06": {
+  "size_m": [
+   3.0,
+   3.0
+  ],
+  "maps": {
+   "diff": "res://textures/polyhaven/floor_tiles_06/floor_tiles_06_diff_1k.jpg",
+   "nor_gl": "res://textures/polyhaven/floor_tiles_06/floor_tiles_06_nor_gl_1k.jpg",
+   "rough": "res://textures/polyhaven/floor_tiles_06/floor_tiles_06_rough_1k.jpg"
+  }
+ },
+ "laminate_floor_02": {
+  "size_m": [
+   1.6999999284744263,
+   1.7000000476837158
+  ],
+  "maps": {
+   "diff": "res://textures/polyhaven/laminate_floor_02/laminate_floor_02_diff_1k.jpg",
+   "nor_gl": "res://textures/polyhaven/laminate_floor_02/laminate_floor_02_nor_gl_1k.jpg",
+   "rough": "res://textures/polyhaven/laminate_floor_02/laminate_floor_02_rough_1k.jpg"
+  }
+ },
+ "rounded_square_tiled_wall": {
+  "size_m": [
+   2.0,
+   2.0
+  ],
+  "maps": {
+   "diff": "res://textures/polyhaven/rounded_square_tiled_wall/rounded_square_tiled_wall_diff_1k.jpg",
+   "nor_gl": "res://textures/polyhaven/rounded_square_tiled_wall/rounded_square_tiled_wall_nor_gl_1k.jpg",
+   "rough": "res://textures/polyhaven/rounded_square_tiled_wall/rounded_square_tiled_wall_rough_1k.jpg"
+  }
+ },
+ "long_white_tiles": {
+  "size_m": [
+   1.2699999809265137,
+   1.2699999809265137
+  ],
+  "maps": {
+   "diff": "res://textures/polyhaven/long_white_tiles/long_white_tiles_diff_1k.jpg",
+   "nor_gl": "res://textures/polyhaven/long_white_tiles/long_white_tiles_nor_gl_1k.jpg",
+   "rough": "res://textures/polyhaven/long_white_tiles/long_white_tiles_rough_1k.jpg"
+  }
+ },
+ "anti_skid_tiles": {
+  "size_m": [
+   1.8000000715255737,
+   1.8000000715255737
+  ],
+  "maps": {
+   "diff": "res://textures/polyhaven/anti_skid_tiles/anti_skid_tiles_diff_1k.jpg",
+   "nor_gl": "res://textures/polyhaven/anti_skid_tiles/anti_skid_tiles_nor_gl_1k.jpg",
+   "rough": "res://textures/polyhaven/anti_skid_tiles/anti_skid_tiles_rough_1k.jpg"
+  }
+ },
+ "rubber_tiles": {
+  "size_m": [
+   1.9999996423721313,
+   1.9999996423721313
+  ],
+  "maps": {
+   "diff": "res://textures/polyhaven/rubber_tiles/rubber_tiles_diff_1k.jpg",
+   "nor_gl": "res://textures/polyhaven/rubber_tiles/rubber_tiles_nor_gl_1k.jpg",
+   "rough": "res://textures/polyhaven/rubber_tiles/rubber_tiles_rough_1k.jpg"
+  }
+ },
+ "painted_plaster_wall": {
+  "size_m": [
+   2.0,
+   2.0
+  ],
+  "maps": {
+   "diff": "res://textures/polyhaven/painted_plaster_wall/painted_plaster_wall_diff_1k.jpg",
+   "nor_gl": "res://textures/polyhaven/painted_plaster_wall/painted_plaster_wall_nor_gl_1k.jpg",
+   "rough": "res://textures/polyhaven/painted_plaster_wall/painted_plaster_wall_rough_1k.jpg"
+  }
+ },
+ "white_stucco": {
+  "size_m": [
+   1.9980629682540894,
+   1.9980640411376953
+  ],
+  "maps": {
+   "diff": "res://textures/polyhaven/white_stucco/white_stucco_diff_1k.jpg",
+   "nor_gl": "res://textures/polyhaven/white_stucco/white_stucco_nor_gl_1k.jpg",
+   "rough": "res://textures/polyhaven/white_stucco/white_stucco_rough_1k.jpg"
+  }
+ },
+ "grey_plaster": {
+  "size_m": [
+   1.0,
+   1.0
+  ],
+  "maps": {
+   "diff": "res://textures/polyhaven/grey_plaster/grey_plaster_diff_1k.jpg",
+   "nor_gl": "res://textures/polyhaven/grey_plaster/grey_plaster_nor_gl_1k.jpg",
+   "rough": "res://textures/polyhaven/grey_plaster/grey_plaster_rough_1k.jpg"
+  }
+ },
+ "plywood": {
+  "size_m": [
+   0.499999940395355,
+   0.499999940395355
+  ],
+  "maps": {
+   "diff": "res://textures/polyhaven/plywood/plywood_diff_1k.jpg",
+   "nor_gl": "res://textures/polyhaven/plywood/plywood_nor_gl_1k.jpg",
+   "rough": "res://textures/polyhaven/plywood/plywood_rough_1k.jpg"
+  }
+ },
+ "lacquered_cherry_wood": {
+  "size_m": [
+   1.0,
+   1.0
+  ],
+  "maps": {
+   "diff": "res://textures/polyhaven/lacquered_cherry_wood/lacquered_cherry_wood_diff_1k.jpg",
+   "nor_gl": "res://textures/polyhaven/lacquered_cherry_wood/lacquered_cherry_wood_nor_gl_1k.jpg",
+   "rough": "res://textures/polyhaven/lacquered_cherry_wood/lacquered_cherry_wood_rough_1k.jpg"
+  }
+ },
+ "concrete_pavement": {
+  "size_m": [
+   1.8000000715255737,
+   1.8000000715255737
+  ],
+  "maps": {
+   "diff": "res://textures/polyhaven/concrete_pavement/concrete_pavement_diff_1k.jpg",
+   "nor_gl": "res://textures/polyhaven/concrete_pavement/concrete_pavement_nor_gl_1k.jpg",
+   "rough": "res://textures/polyhaven/concrete_pavement/concrete_pavement_rough_1k.jpg"
+  }
+ },
+ "asphalt_02": {
+  "size_m": [
+   3.000000238418579,
+   3.0
+  ],
+  "maps": {
+   "diff": "res://textures/polyhaven/asphalt_02/asphalt_02_diff_1k.jpg",
+   "nor_gl": "res://textures/polyhaven/asphalt_02/asphalt_02_nor_gl_1k.jpg",
+   "rough": "res://textures/polyhaven/asphalt_02/asphalt_02_rough_1k.jpg"
+  }
+ },
+ "grass_ground": {
+  "size_m": [
+   2.509999990463257,
+   2.509999990463257
+  ],
+  "maps": {
+   "diff": "res://textures/polyhaven/grass_ground/grass_ground_diff_1k.jpg",
+   "nor_gl": "res://textures/polyhaven/grass_ground/grass_ground_nor_gl_1k.jpg",
+   "rough": "res://textures/polyhaven/grass_ground/grass_ground_rough_1k.jpg"
+  }
+ }
+}
