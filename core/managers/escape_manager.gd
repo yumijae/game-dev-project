@@ -7,9 +7,11 @@ extends Node
 ##   2. Rooftop SOS       - 45 cumulative seconds at the rooftop antenna
 ##                          (0, 15.2, 0) with the phone out sends an SOS text
 ##                          and moves rescue up to 3:30 AM.
-##   3. Gate Breach       - Master Gate Key (Cashier #3) plus bolt cutters
-##                          (MIT Office #12) or a crowbar (Staff Room #5), and
-##                          a loud 20-second breach at the gate.
+##   3. Gate Breach       - after midnight: the Master Gate Key (one of the
+##                          Server Room, Faculty Room, Room 403 or Pantry)
+##                          for the padlock, bolt cutters (MIT Office #12) for
+##                          the chain and a crowbar (Staff Room #5) for the
+##                          track - 30 loud seconds every robot homes in on.
 ## In every case the run is won by walking out through the open gate.
 
 const SOS_REQUIRED_SECONDS: float = 45.0

@@ -297,6 +297,15 @@ static func call_for_help(door: InteractableDoor, asker: Node3D) -> RobotBase:
 	return best
 
 
+## The server relays an alarm: every robot learns `point` at once, however
+## far away, and goes to look (one that cannot leave its floor still won't).
+func alert_to(point: Vector3) -> void:
+	if not is_threatening() or is_disabled:
+		return
+	remember(point)
+	_on_heard(point, &"alarm", 1.0)
+
+
 ## Still on its way to open a door for another robot.
 func is_helping() -> bool:
 	if help_door == null:

@@ -3,10 +3,12 @@ extends Node3D
 ## Stocks the campus when the night starts. Its Marker3D children are written
 ## by the map builder and carry "room_id" and "room_type" metadata.
 ##
-## Story-critical items always appear in the rooms the design names (the gate
-## key at the Cashier, fire extinguishers in the Kitchen and offices, the
+## Story-critical items always appear in the rooms the design names (fire
+## extinguishers in the Kitchen and offices, the
 ## tasers in the MIT Office and Staff Room, and so on). Leftover markers then get a
 ## chance at a common item so no two nights are stocked quite the same.
+## The Master Gate Key moves each night between a few rooms upstairs, where
+## the robots are, so the early breach always means a trip through them.
 
 ## Chance that a spare marker receives a random common item.
 @export_range(0.0, 1.0) var filler_chance: float = 0.3
@@ -16,7 +18,6 @@ extends Node3D
 ## room id -> [[item id, count], ...]
 const GUARANTEED: Dictionary = {
 	2: [[ItemDB.WATER, 1]],
-	3: [[ItemDB.REHAS_KEY, 1]],
 	4: [[ItemDB.FIRE_EXTINGUISHER, 3], [ItemDB.WATER, 1]],
 	5: [[ItemDB.CROWBAR, 1], [ItemDB.TASER, 1], [ItemDB.ALCOHOL, 1], [ItemDB.GAUZE, 1]],
 	9: [[ItemDB.ALCOHOL, 1]],
@@ -31,11 +32,18 @@ const GUARANTEED: Dictionary = {
 	27: [[ItemDB.TABLECLOTH_RAG, 2], [ItemDB.TABLECLOTH_RAG, 1], [ItemDB.GLASS_BOTTLE, 1], [ItemDB.WATER, 1]],
 }
 
+## One of these rooms gets the Master Gate Key each night: Server Room (2F),
+## Faculty Room (3F), Room 403 and the Pantry (4F).
+const KEY_ROOMS: Array[int] = [11, 18, 25, 26]
+
 ## Things that belong on the floor, stood or laid against a wall, never on a
 ## desk: the tall extinguisher and the long gate tools.
 const FLOOR_ITEMS: Array[StringName] = [ItemDB.FIRE_EXTINGUISHER, ItemDB.CROWBAR, ItemDB.BOLT_CUTTERS]
 ## A marker this far above the room's floor is a desk, shelf or counter top.
 const SURFACE_HEIGHT: float = 0.1
+## Markers higher than this (shelf tops, high cabinets) are out of Juan's
+## reach and never used. Counters stand about 1.05 m.
+const MAX_REACH_HEIGHT: float = 1.15
 ## Nothing is set down closer than this to a doorway (leaves swing, robots pass).
 const DOOR_CLEARANCE: float = 1.1
 const SOLID_MASK: int = 1 | 8 | 16
@@ -74,9 +82,14 @@ func _ready() -> void:
 	else:
 		rng.randomize()
 	var by_room: Dictionary = _collect_markers(rng)
-	for room_id: int in GUARANTEED:
+	var guaranteed: Dictionary = GUARANTEED.duplicate(true)
+	var key_room: int = KEY_ROOMS[rng.randi_range(0, KEY_ROOMS.size() - 1)]
+	var key_entries: Array = guaranteed.get(key_room, [])
+	key_entries.append([ItemDB.REHAS_KEY, 1])
+	guaranteed[key_room] = key_entries
+	for room_id: int in guaranteed:
 		var markers: Array = by_room.get(room_id, [])
-		var entries: Array = GUARANTEED[room_id].duplicate()
+		var entries: Array = guaranteed[room_id].duplicate()
 		# Bulky things first, so they get the open floor before the rest.
 		entries.sort_custom(func(a: Array, b: Array) -> bool: return _footprint(a[0]) > _footprint(b[0]))
 		for entry: Array in entries:
@@ -347,6 +360,8 @@ func _collect_markers(rng: RandomNumberGenerator) -> Dictionary:
 		if marker == null:
 			continue
 		var room_id: int = marker.get_meta("room_id", 0)
+		if marker.global_position.y - _floor_level(marker.global_position, room_id) > MAX_REACH_HEIGHT:
+			continue
 		if not by_room.has(room_id):
 			by_room[room_id] = []
 		var list: Array = by_room[room_id]
