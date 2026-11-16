@@ -7,8 +7,10 @@ extends CharacterBody3D
 ## hiding, peeking under doors, and item use.
 ##
 ## Controls:  WASD move - Shift sprint - Ctrl crouch - E interact - Q next action
-##   F flashlight - Tab raise phone - T footwear - C crafting - 1-6 backpack to hand
+##   F flashlight - Tab raise phone - V cameras on/off (A/D camera, W/S floor)
+##   T footwear - C crafting - 1-6 backpack to hand
 ##   LMB use held item - RMB cancel - R switch hand - X drop - G stifle a gasp
+##   Esc pause (PauseMenu)
 
 const STAND_HEIGHT: float = 1.75
 const CROUCH_HEIGHT: float = 1.0
@@ -92,8 +94,9 @@ func _ready() -> void:
 	_peek_camera.near = 0.01
 	_peek_camera.fov = 70.0
 	add_child(_peek_camera)
-	ScentManager.register_player(self, stats)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	camera.fov = GameSettings.fov
+	GameSettings.changed.connect(func() -> void: camera.fov = GameSettings.fov)
 	EventBus.game_lost.connect(_on_game_ended.unbind(1))
 	EventBus.game_won.connect(_on_game_ended.unbind(3))
 
@@ -125,12 +128,10 @@ func _build_components() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and not is_peeking and not _is_watching_cameras():
 		var motion := event as InputEventMouseMotion
-		rotate_y(-motion.relative.x * mouse_sensitivity)
-		head.rotate_x(-motion.relative.y * mouse_sensitivity)
+		var sensitivity: float = mouse_sensitivity * GameSettings.sensitivity
+		rotate_y(-motion.relative.x * sensitivity)
+		head.rotate_x(-motion.relative.y * sensitivity * (-1.0 if GameSettings.invert_y else 1.0))
 		head.rotation.x = clampf(head.rotation.x, deg_to_rad(-88.0), deg_to_rad(88.0))
-		return
-	if event.is_action_pressed(&"ui_cancel"):
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		return
 	if event is InputEventMouseButton and (event as InputEventMouseButton).pressed \
 			and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
@@ -151,6 +152,21 @@ func _unhandled_input(event: InputEvent) -> void:
 			if mb.button_index == MOUSE_BUTTON_WHEEL_UP:
 				phone.screen.scroll(-1)
 				return
+		if phone.screen.is_in_cameras():
+			# Juan stands still while he watches, so the movement keys are
+			# free: A/D step through the cameras, W/S change floor.
+			if event.is_action_pressed(&"move_left"):
+				phone.screen.camera_step(-1)
+				return
+			if event.is_action_pressed(&"move_right"):
+				phone.screen.camera_step(1)
+				return
+			if event.is_action_pressed(&"move_forward"):
+				phone.screen.camera_floor(1)
+				return
+			if event.is_action_pressed(&"move_back"):
+				phone.screen.camera_floor(-1)
+				return
 		if event.is_action_pressed(&"use_item"):
 			phone.screen.confirm()
 			return
@@ -158,14 +174,15 @@ func _unhandled_input(event: InputEvent) -> void:
 			if not phone.screen.back():
 				phone.set_phone_out(false)
 			return
-		if event.is_action_pressed(&"toggle_cctv"):
+	if event.is_action_pressed(&"toggle_cctv") and not is_channeling() and not is_peeking:
+		# V toggles the Cameras app from anywhere: on from the pocket or from
+		# another app, off (phone away) when the feed is already up.
+		if phone.is_phone_out and phone.screen != null and phone.screen.is_in_cameras():
 			phone.set_phone_out(false)
-			return
-	if event.is_action_pressed(&"toggle_cctv") and not is_channeling() and not is_peeking and not is_hidden:
-		# Shortcut straight into the Cameras app.
-		phone.set_phone_out(true)
-		if phone.is_phone_out and phone.screen != null:
-			phone.screen.show_phone(PhoneScreen.Page.CAMERAS)
+		else:
+			phone.set_phone_out(true)
+			if phone.is_phone_out and phone.screen != null:
+				phone.screen.show_phone(PhoneScreen.Page.CAMERAS)
 		return
 	if event.is_action_pressed(&"stifle_gasp"):
 		_stifle_gasp()
@@ -546,9 +563,9 @@ func exit_hiding() -> void:
 
 ## The spot's own exit point when Juan fits there; otherwise the nearest
 ## point that does. Some exits land in a wall, a sink counter or a chair, and
-## the physics push-out then wedged Juan into gaps no Aswang could follow.
+## the physics push-out then wedged Juan into gaps no robot could follow.
 ## A valid point has floor under it, room for the standing capsule, navmesh
-## within reach (so the Aswang can still get to him) and no wall between it
+## within reach (so the robots can still get to him) and no wall between it
 ## and the hiding spot.
 func _safe_exit_position(spot: HidingSpot) -> Vector3:
 	var preferred: Vector3 = spot.get_exit_position()
@@ -748,7 +765,7 @@ func _begin_first_aid() -> void:
 	if not inventory.has_item(ItemDB.GAUZE) and not inventory.has_item(ItemDB.TABLECLOTH_RAG):
 		EventBus.ui_notification.emit("You need gauze or a tablecloth rag to bind it.", 2.5)
 		return
-	if not stats.is_bleeding and ScentManager.raw_scent_level <= 0.0:
+	if not stats.is_bleeding:
 		EventBus.ui_notification.emit("Nothing to treat.", 2.0)
 		return
 	start_channel("Disinfecting and bandaging", 7.0, _finish_first_aid)
@@ -761,7 +778,6 @@ func _finish_first_aid() -> void:
 	inventory.remove_item(ItemDB.ALCOHOL, 1)
 	inventory.remove_item(dressing, 1)
 	stats.stop_bleeding()
-	ScentManager.reset_scent()
 	EventBus.item_used.emit(ItemDB.ALCOHOL)
 	EventBus.ui_notification.emit("Clean and bound. The bleeding has stopped.", 3.0)
 
@@ -807,7 +823,7 @@ func get_head_position() -> Vector3:
 	return head.global_position
 
 
-## Scales an Aswang's sight range: lights give Juan away, darkness and a
+## Scales a robot's sight range: lights give Juan away, darkness and a
 ## crouch hide him.
 func get_visibility_factor() -> float:
 	if phone.is_flashlight_on:
@@ -826,7 +842,7 @@ func is_concealed() -> bool:
 
 # --------------------------------------------------------------------- damage
 
-## An Aswang reached Juan. The first hit wounds him (Bleeding); a hit while he
+## A robot reached Juan. The first hit wounds him (Bleeding); a hit while he
 ## is already bleeding kills. Returns true when the blow was fatal.
 func take_attack(attacker: Hostile) -> bool:
 	if is_dead or _invulnerable_time > 0.0:
@@ -861,6 +877,8 @@ func die(cause: String) -> void:
 func _on_game_ended() -> void:
 	is_dead = true
 	cancel_channel()
+	# The handset is drawn above the HUD and would cover the ending screen.
+	phone.set_phone_out(false)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 

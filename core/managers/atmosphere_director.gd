@@ -2,7 +2,7 @@ class_name AtmosphereDirector
 extends Node3D
 ## Turns the clean STI building into the place it is at 11:45 PM on a storm
 ## night. Everything here is cosmetic and procedural - no gameplay rule reads
-## it, and nothing in it makes a sound an Aswang (or the player's ears) could
+## it, and nothing in it makes a sound a robot (or the player's ears) could
 ## mistake for a real cue.
 ##
 ##   * decay pass on walls, floors and ceilings (shaders/decay_overlay)
@@ -75,6 +75,9 @@ var _rain_filter: AudioEffectLowPassFilter = null
 var _rain_particles: CPUParticles3D = null
 var _player: PlayerController = null
 var _update_timer: float = 0.0
+## [material, decay pass] for every decayed surface, so the pass can be
+## dropped on the lowest quality preset.
+var _decay_passes: Array[Array] = []
 
 
 func _ready() -> void:
@@ -128,6 +131,17 @@ func _apply_decay() -> void:
 		var rotten: Material = base.duplicate()
 		rotten.next_pass = decay
 		instance.material_override = rotten
+		_decay_passes.append([rotten, decay])
+	_fit_decay()
+	GameSettings.changed.connect(_fit_decay)
+
+
+## The grime overlay is a second, fully lit, noise-heavy draw of nearly every
+## pixel on screen. Weak graphics chips cannot afford it.
+func _fit_decay() -> void:
+	var wanted: bool = bool(GameSettings.preset_value("decay"))
+	for pair: Array in _decay_passes:
+		(pair[0] as Material).next_pass = (pair[1] as Material) if wanted else null
 
 
 func _tune_environment() -> void:

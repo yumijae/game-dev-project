@@ -2,7 +2,7 @@ class_name HeavyProp
 extends StaticBody3D
 ## Something heavy enough to block the gap under a door: a 2F CPU tower, a
 ## 1F/3F thesis stack, or a desk. Dragging it against a door takes 6 seconds,
-## costs 25% Stamina and scrapes loudly - but the Balbal's Black Dog form can
+## costs 25% Stamina and scrapes loudly - but SCUTTLE can
 ## no longer crawl underneath.
 
 const LAYER_INTERACT: int = 2

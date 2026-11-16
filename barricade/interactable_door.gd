@@ -4,10 +4,8 @@ extends Node3D
 ##
 ## The node sits on the hinge; its child "Leaf" (AnimatableBody3D) is the door.
 ##   handle_state        UNLOCKED / LOCKED / CHAIR_WEDGED / CABLE_TIED
-##   bottom_gap_blocked  a HeavyProp dragged against it - stops the Black Dog
-##   is_salted           a one-time line of rock salt across the threshold
-## The Aswang talk to it through can_aswang_open(), shove(), can_slip_under()
-## and trigger_salt().
+##   bottom_gap_blocked  a HeavyProp dragged against it - stops SCUTTLE
+## The robots talk to it through can_robot_open(), shove() and can_slip_under().
 
 enum HandleState { UNLOCKED, LOCKED, CHAIR_WEDGED, CABLE_TIED }
 
@@ -18,9 +16,7 @@ const HANDLE_TURN_TIME: float = 0.8
 const LOCK_TIME: float = 1.0
 const WEDGE_TIME: float = 2.0
 const CABLE_TIE_TIME: float = 4.0
-const SALT_TIME: float = 3.0
-const SALT_STUN: float = 15.0
-## Seconds the Black Dog needs to squeeze under an unblocked door.
+## Seconds SCUTTLE needs to squeeze under an unblocked door.
 const SLIP_UNDER_TIME: float = 3.0
 const MAX_HEALTH: float = 100.0
 const SWING_TIME: float = 0.4
@@ -44,18 +40,16 @@ const GAP_HEIGHT: float = 0.09
 
 var handle_state: HandleState = HandleState.UNLOCKED
 var bottom_gap_blocked: bool = false
-var is_salted: bool = false
 var is_open: bool = false
 var is_broken: bool = false
 var health: float = MAX_HEALTH
 var wedge_shoves_left: int = 0
 var blocking_prop: HeavyProp = null
-## While a "whispering door" hallucination plays, nothing is really outside.
+## While a "voice behind the door" hallucination plays, nothing is really outside.
 var hallucination_time_left: float = 0.0
 
 var _tween: Tween = null
 var _leaf: Node3D = null
-var _salt_mesh: MeshInstance3D = null
 var _wedge_mesh: Node3D = null
 var _cable_mesh: Node3D = null
 var _thumb_turn: Node3D = null
@@ -210,8 +204,8 @@ func interact(player: PlayerController, action_id: StringName) -> void:
 
 
 ## Lowers the camera to the gap under the door and reports what stands outside:
-## human shoes never come at night - backward paws mean the Balbal, and no
-## shadow at all means the knocking was in Juan's head.
+## wheels, feet or claws mean a robot is really there, and no shadow at all
+## means the voice was in Juan's head.
 func peek_under_door(player: PlayerController) -> void:
 	var side: float = which_side(player.global_position)
 	var center: Vector3 = get_center()
@@ -224,14 +218,14 @@ func peek_under_door(player: PlayerController) -> void:
 func _describe_far_side(side: float) -> String:
 	var far_point: Vector3 = get_side_position(side, 1.0)
 	for node: Node in get_tree().get_nodes_in_group(&"hostiles"):
-		var aswang := node as Hostile
-		if aswang == null or not aswang.is_threatening():
+		var hostile := node as Hostile
+		if hostile == null or not hostile.is_threatening():
 			continue
-		if absf(aswang.global_position.y - far_point.y) > 1.5:
+		if absf(hostile.global_position.y - far_point.y) > 1.5:
 			continue
-		if aswang.global_position.distance_to(far_point) > 2.6 or which_side(aswang.global_position) != side:
+		if hostile.global_position.distance_to(far_point) > 2.6 or which_side(hostile.global_position) != side:
 			continue
-		return aswang.get_feet_description()
+		return hostile.get_feet_description()
 	if hallucination_time_left > 0.0:
 		return "No shadow under the door. No feet. ...There is no one out there."
 	return "Only the floor. Nothing is standing outside."
@@ -302,14 +296,6 @@ func _finish_untie(player: PlayerController) -> void:
 	EventBus.door_state_changed.emit(self)
 
 
-func _finish_salt(player: PlayerController) -> void:
-	if is_salted or true:
-		return
-	is_salted = true
-	_show_salt(true)
-	EventBus.ui_notification.emit("A line of salt across the threshold. It will hold once.", 3.0)
-
-
 # ------------------------------------------------------------- gap barricade
 
 func set_gap_blocked(prop: HeavyProp) -> void:
@@ -324,10 +310,10 @@ func clear_gap_block() -> void:
 	EventBus.door_state_changed.emit(self)
 
 
-# ----------------------------------------------------------------- Aswang API
+# ------------------------------------------------------------------ Robot API
 
 ## True when something with hands can simply turn the handle.
-func can_aswang_open() -> bool:
+func can_robot_open() -> bool:
 	return not is_passable() and not permanently_locked and blocking_prop == null \
 		and handle_state in [HandleState.UNLOCKED, HandleState.CHAIR_WEDGED]
 
@@ -337,7 +323,7 @@ func get_handle_delay() -> float:
 	return WEDGE_HANDLE_DELAY if handle_state == HandleState.CHAIR_WEDGED else HANDLE_TURN_TIME
 
 
-## The Black Dog can crawl under any closed door whose gap is not blocked.
+## SCUTTLE can crawl under any closed door whose gap is not blocked.
 func can_slip_under() -> bool:
 	return not bottom_gap_blocked and not permanently_locked
 
@@ -387,19 +373,6 @@ func break_open() -> void:
 	EventBus.door_state_changed.emit(self)
 
 
-## Called by an Aswang about to cross the threshold. If salted, the line burns
-## away, the creature is stunned for 15 s and the crossing fails.
-func trigger_salt(aswang: Hostile) -> bool:
-	if not is_salted:
-		return false
-	is_salted = false
-	_show_salt(false)
-	SfxSynth.play_at(self, SfxSynth.growl(), get_center() + Vector3.UP, 2.0, 1.4)
-	EventBus.salt_barrier_triggered.emit(self, aswang)
-	aswang.stun(SALT_STUN, &"salt")
-	return true
-
-
 # -------------------------------------------------------------------- visuals
 
 func _swing(target_yaw: float, time: float) -> void:
@@ -415,23 +388,6 @@ func _shake() -> void:
 	_tween = create_tween()
 	_tween.tween_property(self, "rotation:y", closed_yaw + signf(open_yaw - closed_yaw) * 0.05, 0.05)
 	_tween.tween_property(self, "rotation:y", closed_yaw, 0.12)
-
-
-func _show_salt(visible_now: bool) -> void:
-	if _salt_mesh == null and visible_now:
-		var mesh := BoxMesh.new()
-		mesh.size = Vector3(door_width, 0.012, 0.1)
-		var material := StandardMaterial3D.new()
-		material.albedo_color = Color(0.95, 0.95, 0.92)
-		material.roughness = 1.0
-		mesh.material = material
-		_salt_mesh = MeshInstance3D.new()
-		_salt_mesh.mesh = mesh
-		_salt_mesh.top_level = true
-		add_child(_salt_mesh)
-		_salt_mesh.global_transform = Transform3D(Basis(Vector3.UP, closed_yaw), get_center() + Vector3.UP * 0.008)
-	if _salt_mesh != null:
-		_salt_mesh.visible = visible_now
 
 
 func _show_wedge(visible_now: bool) -> void:

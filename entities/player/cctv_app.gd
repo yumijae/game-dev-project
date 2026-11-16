@@ -101,7 +101,8 @@ func open() -> void:
 		EventBus.ui_notification.emit("The phone is dead.", 2.0)
 		return
 	is_open = true
-	_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	_fit_quality()
+	_refresh_rendering()
 	_show_feed()
 
 
@@ -112,11 +113,66 @@ func close() -> void:
 	_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
 
 
+## The next (+1) or previous (-1) camera on the floor being watched. It wraps
+## round within that floor; `step_floor` is the only way to leave it.
 func step(direction: int) -> void:
 	if not is_open or _feeds.is_empty():
 		return
-	_index = posmod(_index + direction, _feeds.size())
+	var on_floor: Array[int] = _floor_feeds()
+	_index = on_floor[posmod(on_floor.find(_index) + direction, on_floor.size())]
 	_show_feed()
+
+
+## Indices of every feed on the current feed's floor, in feed order.
+func _floor_feeds() -> Array[int]:
+	var on_floor: Array[int] = []
+	var floor_index: int = feed_floor()
+	for i: int in _feeds.size():
+		if int(_feeds[i]["floor"]) == floor_index:
+			on_floor.append(i)
+	return on_floor
+
+
+## Position of the current feed among its floor's cameras, from 0.
+func feed_floor_position() -> int:
+	return maxi(_floor_feeds().find(_index), 0)
+
+
+func feed_floor_count() -> int:
+	return _floor_feeds().size()
+
+
+## Jumps to the first camera of the next floor up (+1) or down (-1), wrapping
+## round, so no feed is more than a few presses away.
+func step_floor(direction: int) -> void:
+	if not is_open or _feeds.is_empty():
+		return
+	var floors: Array[int] = []
+	for feed: Dictionary in _feeds:
+		if not floors.has(int(feed["floor"])):
+			floors.append(int(feed["floor"]))
+	floors.sort()
+	var target: int = floors[posmod(floors.find(feed_floor()) + direction, floors.size())]
+	for i: int in _feeds.size():
+		if int(_feeds[i]["floor"]) == target:
+			_index = i
+			break
+	_show_feed()
+
+
+## A dead server shows static: there is nothing to render behind it.
+func _refresh_rendering() -> void:
+	_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS if is_open and not is_offline else SubViewport.UPDATE_DISABLED
+
+
+## The feed is a second full render of the school; on the cheaper quality
+## presets it drops its own ambient occlusion and anti-aliasing.
+func _fit_quality() -> void:
+	if _camera.environment != null:
+		_camera.environment.ssao_enabled = bool(GameSettings.preset_value("ssao"))
+	_viewport.msaa_3d = Viewport.MSAA_DISABLED
+	_viewport.mesh_lod_threshold = float(GameSettings.preset_value("lod"))
+	_viewport.positional_shadow_atlas_size = mini(int(GameSettings.preset_value("pos_atlas")), 2048)
 
 
 func _show_feed() -> void:
@@ -184,6 +240,7 @@ func get_static() -> float:
 
 func _on_lab_power_cut(_cause: StringName) -> void:
 	is_offline = true
+	_refresh_rendering()
 
 
 func feed_index() -> int:

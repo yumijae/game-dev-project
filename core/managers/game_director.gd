@@ -1,8 +1,8 @@
 class_name GameDirector
 extends Node
 ## Runs one night at STI College Kalibo: cuts the power, puts Juan Dela Cruz at his desk
-## in Room 402, keeps the three Aswang dormant until midnight, tolls the
-## kampana on the hour, and handles winning, dying and restarting.
+## in Room 402, keeps the Expo robots docked until midnight, tolls the hour,
+## and handles winning, dying and restarting.
 
 const START_ROOM_ID: int = 23
 const EMERGENCY_LIGHT_ENERGY: float = 0.5
@@ -50,6 +50,17 @@ func _ready() -> void:
 	EventBus.game_lost.connect(_on_game_lost)
 	TimeManager.start()
 	_wake_up_bang.call_deferred()
+	var culler := FloorCuller.new()
+	culler.name = "FloorCuller"
+	add_child(culler)
+	var pause_menu := PauseMenu.new()
+	pause_menu.name = "PauseMenu"
+	pause_menu.director = self
+	add_child(pause_menu)
+	# The night's Environment and lights now exist: fit them to the player's
+	# quality settings.
+	GameSettings.apply_world()
+	GameSettings.apply_world.call_deferred()
 
 
 ## The Expo robots, parked on the Com Sci Lab's charging docks (in dock order).
@@ -286,7 +297,7 @@ func _on_rescue_arrived() -> void:
 			var hostile := node as Hostile
 			if hostile != null:
 				hostile.deactivate()
-		EventBus.ui_notification.emit("5:30 AM. First light. The guard is at the gate.", 6.0)
+		EventBus.ui_notification.emit("6:00 AM. First light. The robots have stopped. The guard is at the gate.", 6.0)
 	else:
 		EventBus.ui_notification.emit("Headlights on the street. Rescue is at the Main Lobby gate!", 6.0)
 

@@ -2,7 +2,6 @@ class_name InventoryComponent
 extends Node
 ## Juan's carrying capacity: two hand slots and a six-slot backpack.
 ## Slots 0 and 1 are the left and right hand; slots 2-7 are the backpack.
-## Also watches the Flask of Lana, which boils near a real Aswang.
 
 const HAND_SLOTS: int = 2
 const BACKPACK_SLOTS: int = 6

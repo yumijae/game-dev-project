@@ -10,6 +10,10 @@ extends RobotBase
 ##   - Drawn to light and noise. A flashlight in its sight carries a long way;
 ##     in the dark it only notices Juan up close.
 ##   - Its screen glows and its motor hums, so you can hear and see it coming.
+##   - The body is one rigid shell on wheels, so it is animated as a whole
+##     (_process): it leans into speed and turns, bobs when it talks, swivels
+##     to look around, jolts when it spots Juan, rocks at a closed door and
+##     shudders when sprayed. The face blinks and changes with its mood.
 ##     The face tells you its mood: smile (patrol), "?" (checking something),
 ##     "!" (chasing).
 
@@ -21,9 +25,13 @@ const CHASE_SPEED: float = 3.1
 ## How far a flashlight in its line of sight gives Juan away.
 const LIGHT_SIGHT_RANGE: float = 22.0
 const DOOR_WAIT: float = 4.0
+## How long it stops to look around where a noise or a lost visitor led it.
+const LOOK_TIME: float = 2.5
 const LOSE_TIME: float = 4.0
 const RETREAT_TIME: float = 9.0
 const SPEECH_RANGE: float = 14.0
+## Navmesh points sit up to ~0.2 m above the floor; anything higher is a stair.
+const STAIR_TOLERANCE: float = 0.4
 ## Screen panel in the fitted model's space (see RobotModels).
 const SCREEN_CENTER := Vector3(0.0, 1.25, 0.03) * (1.25 / 1.6)
 const SCREEN_NORMAL := Vector3(0.0, 0.51, 0.86)
@@ -46,6 +54,9 @@ const LINES_LOST: Array[String] = [
 ]
 const LINE_DOOR := "Please open the door. I cannot reach the handle."
 const LINE_HIT := "Thank you for your cooperation."
+const GLOW_ENERGY: float = 0.6
+## Faces shown while its sensors are scrambled.
+const SCRAMBLED_FACES: Array[String] = ["x_x", "#@!?", "x_X", "%&#", ">_<", "?!?"]
 
 var state: State = State.DOCKED
 var home_floor: int = 1
@@ -55,11 +66,25 @@ var _patrol_timer: float = 0.0
 var _talk_timer: float = 8.0
 var _lose_timer: float = 0.0
 var _door_timer: float = 0.0
+var _look_timer: float = 0.0
 var _retreat_timer: float = 0.0
 var _screen_mat: StandardMaterial3D = null
 var _face: Label3D = null
 var _glow: OmniLight3D = null
 var _motor: AudioStreamPlayer3D = null
+# Body animation (see _process).
+var _mood: String = "sleep"
+var _anim_time: float = 0.0
+var _last_speed: float = 0.0
+var _last_yaw: float = 0.0
+var _accel_smooth: float = 0.0
+var _turn_smooth: float = 0.0
+## One-shot gestures, each counting down from 1 to 0.
+var _nod: float = 0.0
+var _jolt: float = 0.0
+var _lunge: float = 0.0
+var _blink_timer: float = 3.0
+var _scramble_timer: float = 0.0
 
 
 func _init() -> void:
@@ -115,7 +140,7 @@ func _on_built() -> void:
 	model.add_child(_face)
 	_glow = OmniLight3D.new()
 	_glow.omni_range = 2.6
-	_glow.light_energy = 0.6
+	_glow.light_energy = GLOW_ENERGY
 	_glow.shadow_enabled = false
 	_glow.position = SCREEN_CENTER + SCREEN_NORMAL * 0.25
 	model.add_child(_glow)
@@ -153,6 +178,7 @@ func _on_shutdown() -> void:
 
 func _on_attack_landed(fatal: bool) -> void:
 	SfxSynth.play_at(self, SfxSynth.thud(), global_position + Vector3.UP * 0.5, 2.0, 0.8)
+	_lunge = 1.0
 	if not fatal:
 		_say(LINE_HIT)
 		_retreat_timer = RETREAT_TIME
@@ -166,6 +192,8 @@ func _tick(delta: float) -> void:
 	_retreat_timer = maxf(_retreat_timer - delta, 0.0)
 	_talk_timer -= delta
 	_sense(delta)
+	if state != State.INVESTIGATE:
+		_look_timer = 0.0
 	match state:
 		State.PATROL:
 			if _talk_timer <= 0.0:
@@ -175,8 +203,14 @@ func _tick(delta: float) -> void:
 			if _drive(_target, PATROL_SPEED, delta) or _patrol_timer <= 0.0:
 				_pick_patrol_target()
 		State.INVESTIGATE:
-			if _drive(_target, INVESTIGATE_SPEED, delta):
-				_look_around_then_patrol()
+			if _look_timer > 0.0:
+				# Arrived and found nothing: stops and swivels for a moment.
+				_look_timer -= delta
+				ground_idle(delta)
+				if _look_timer <= 0.0:
+					_look_around_then_patrol()
+			elif _drive(_target, INVESTIGATE_SPEED, delta):
+				_look_timer = LOOK_TIME
 		State.CHASE:
 			if knows_where():
 				_target = last_known
@@ -202,6 +236,7 @@ func _sense(delta: float) -> void:
 		if state != State.CHASE:
 			state = State.CHASE
 			_set_face("alert")
+			_jolt = 1.0
 			_say(LINES_SPOTTED[randi() % LINES_SPOTTED.size()])
 	elif state == State.CHASE:
 		_lose_timer -= delta
@@ -242,6 +277,7 @@ func _on_heard(origin: Vector3, _noise_type: StringName, audibility: float) -> v
 	state = State.INVESTIGATE
 	_set_face("question")
 	_target = _on_my_floor(origin)
+	_look_timer = 0.0
 
 
 # ----------------------------------------------------------------- movement
@@ -283,7 +319,7 @@ func _pick_patrol_target() -> void:
 	_patrol_timer = 22.0
 	for _attempt in 8:
 		var p: Vector3 = random_nav_point(global_position, 12.0)
-		if Campus.floor_from_y(p.y + 0.3) == home_floor and _route_stays(p):
+		if _route_stays(p):
 			_target = p
 			return
 	_target = global_position
@@ -292,18 +328,114 @@ func _pick_patrol_target() -> void:
 ## `p` pulled onto this robot's floor (the nearest navmesh point at its height).
 func _on_my_floor(p: Vector3) -> Vector3:
 	var map: RID = get_world_3d().navigation_map
-	var q: Vector3 = NavigationServer3D.map_get_closest_point(map, Vector3(p.x, global_position.y, p.z))
+	var q: Vector3 = NavigationServer3D.map_get_closest_point(map, Vector3(p.x, _floor_height(), p.z))
 	return q if _route_stays(q) else global_position
 
 
-## True when the walkable route to `p` never takes a staircase.
+## Height of the floor its dock is on.
+func _floor_height() -> float:
+	return Campus.floor_y(home_floor)
+
+
+## True when the walkable route to `p` never takes a staircase. Heights are
+## measured from its own floor, not from where it stands: measured from itself
+## it could climb a little with every new target and end up on the stairs.
 func _route_stays(p: Vector3) -> bool:
 	var map: RID = get_world_3d().navigation_map
 	var path: PackedVector3Array = NavigationServer3D.map_get_path(map, global_position, p, true)
 	for point: Vector3 in path:
-		if absf(point.y - global_position.y) > 0.45:
+		if absf(point.y - _floor_height()) > STAIR_TOLERANCE:
 			return false
-	return true
+	return not path.is_empty()
+
+
+# ---------------------------------------------------------------- animation
+
+## Moves the whole shell: lean, roll, swivel and bounce, on top of wherever
+## the AI has driven it. Runs even while stunned, docked or switched off.
+func _process(delta: float) -> void:
+	if model == null or _face == null:
+		return
+	_anim_time += delta
+	var t: float = _anim_time
+	var step: float = maxf(delta, 0.001)
+	var speed: float = Vector2(velocity.x, velocity.z).length()
+	_accel_smooth = lerpf(_accel_smooth, (speed - _last_speed) / step, minf(delta * 6.0, 1.0))
+	_turn_smooth = lerpf(_turn_smooth, angle_difference(_last_yaw, rotation.y) / step, minf(delta * 6.0, 1.0))
+	_last_speed = speed
+	_last_yaw = rotation.y
+	_nod = move_toward(_nod, 0.0, delta * 2.6)
+	_jolt = move_toward(_jolt, 0.0, delta * 2.2)
+	_lunge = move_toward(_lunge, 0.0, delta * 2.0)
+	# Top-heavy on small wheels: tips forward as it speeds up, back as it
+	# brakes, and leans into its turns.
+	var pitch: float = clampf(_accel_smooth * 0.035, -0.12, 0.13) + speed * 0.018
+	var roll: float = clampf(-_turn_smooth * 0.05, -0.1, 0.1)
+	var yaw: float = 0.0
+	var lift: float = 0.0
+	match _mood:
+		"sleep":
+			# Docked: bowed, breathing slowly.
+			pitch = 0.1 + sin(t * 0.9) * 0.012
+		"off":
+			pitch = 0.17
+			roll = 0.05
+		"dazed":
+			var shake: float = clampf(stun_time_left / 1.5, 0.25, 1.0)
+			yaw = sin(t * 38.0) * 0.2 * shake
+			roll += sin(t * 31.0) * 0.07 * shake
+			pitch -= 0.06
+		"question":
+			roll += 0.06
+			if _look_timer > 0.0:
+				# Stopped to check something: swivels left, then right.
+				yaw = sin((LOOK_TIME - _look_timer) / LOOK_TIME * TAU) * 0.7
+		"alert":
+			lift = absf(sin(t * 9.0)) * 0.012
+		_:
+			if speed < 0.2:
+				roll += sin(t * 1.3) * 0.022
+	# A bob with every line it speaks.
+	pitch += sin(_nod * PI) * 0.1
+	# Spotted him: rears back and hops.
+	pitch -= sin(_jolt * PI) * 0.2
+	lift += sin(_jolt * PI) * 0.06
+	# Ramming him.
+	pitch += sin(_lunge * PI) * 0.38
+	# Kept out by a door: rocks against it.
+	if _door_timer > 0.0 and _mood != "off":
+		pitch += maxf(sin(t * 7.0), 0.0) * 0.07
+	var ease_in: float = minf(delta * 14.0, 1.0)
+	model.rotation.x = lerpf(model.rotation.x, pitch, ease_in)
+	model.rotation.z = lerpf(model.rotation.z, roll, ease_in)
+	model.rotation.y = PI + yaw
+	model.position.y = lerpf(model.position.y, lift, ease_in)
+	_animate_face(delta)
+
+
+func _animate_face(delta: float) -> void:
+	var t: float = _anim_time
+	match _mood:
+		"smile":
+			_blink_timer -= delta
+			if _blink_timer <= 0.0:
+				_blink_timer = randf_range(2.5, 6.0)
+			_face.text = "|)" if _blink_timer < 0.13 else ":)"
+		"sleep":
+			_face.text = ["z", "z z", "z z z"][int(t * 0.8) % 3]
+			_glow.light_energy = GLOW_ENERGY * (0.55 + 0.25 * sin(t * 1.2))
+		"question":
+			_face.scale = Vector3.ONE * (1.0 + 0.06 * sin(t * 4.0))
+		"alert":
+			var pulse: float = absf(sin(t * 8.0))
+			_face.scale = Vector3.ONE * (1.0 + 0.2 * pulse)
+			_glow.light_energy = GLOW_ENERGY * (1.0 + 0.8 * pulse)
+		"dazed":
+			_scramble_timer -= delta
+			if _scramble_timer <= 0.0:
+				_scramble_timer = 0.09
+				_face.text = SCRAMBLED_FACES.pick_random()
+			_glow.light_energy = GLOW_ENERGY * randf_range(0.3, 1.2)
 
 
 # --------------------------------------------------------------------- face
@@ -313,9 +445,13 @@ func _say(line: String) -> void:
 		return
 	SfxSynth.play_at(self, SfxSynth.bell(), get_eye_position(), -12.0, 2.2, SPEECH_RANGE)
 	EventBus.ui_subtitle.emit(line, 3.5, &"CONCIERGE")
+	_nod = 1.0
 
 
 func _set_face(mood: String) -> void:
+	_mood = mood
+	_face.scale = Vector3.ONE
+	_glow.light_energy = GLOW_ENERGY
 	var col := Color(0.35, 1.0, 0.75)
 	var text := ":)"
 	match mood:

@@ -33,12 +33,16 @@ const SPEAKER_COLORS: Dictionary = {
 	&"jude": Color(0.84, 0.81, 0.74),
 	&"voice": Color(0.82, 0.62, 0.42),
 	&"whisper": Color(0.62, 0.68, 0.8),
+	&"door_voice": Color(0.82, 0.62, 0.42),
+	&"CONCIERGE": Color(0.55, 0.95, 0.78),
 }
 const SPEAKER_PREFIX: Dictionary = {
 	&"juan": "",
 	&"jude": "",
 	&"voice": "A voice outside  -  ",
 	&"whisper": "A whisper  -  ",
+	&"door_voice": "A voice behind the door  -  ",
+	&"CONCIERGE": "CONCIERGE  -  ",
 }
 ## Panic runs from a calm grey to the same red as blood.
 const PANIC_COLORS: Array[Color] = [
@@ -60,7 +64,6 @@ var _stamina_bar: ProgressBar = null
 var _panic_bar: ProgressBar = null
 var _panic_label: Label = null
 var _battery_bar: ProgressBar = null
-var _scent_bar: ProgressBar = null
 var _stat_rows: Dictionary = {}
 var _status: Label = null
 var _reticle: Panel = null
@@ -109,7 +112,6 @@ func _ready() -> void:
 	EventBus.stamina_changed.connect(func(value: float) -> void: _stamina_bar.value = value)
 	EventBus.panic_changed.connect(_on_panic_changed)
 	EventBus.phone_battery_changed.connect(func(percent: float) -> void: _battery_bar.value = percent)
-	EventBus.scent_level_changed.connect(func(_level: float) -> void: _refresh_scent())
 	EventBus.inventory_changed.connect(_on_inventory_changed)
 	EventBus.ui_prompt_changed.connect(_on_prompt_changed)
 	EventBus.ui_subtitle.connect(_on_subtitle)
@@ -153,7 +155,6 @@ func _process(delta: float) -> void:
 			_location.text = place
 			_location_time = LOCATION_SHOW_TIME
 		_refresh_status()
-		_refresh_scent()
 	# 60%+ Panic: the reticle will not hold still.
 	var shake: float = 0.0
 	if _player.stats.panic >= 60.0:
@@ -228,7 +229,6 @@ func _build() -> void:
 	_panic_bar = _stat_row(stats, &"panic", "Fear", PANIC_COLORS[0], 0.0)
 	_panic_label = (_stat_rows[&"panic"] as Control).get_child(0) as Label
 	_battery_bar = _stat_row(stats, &"battery", "Phone", ASH, PlayerStats.STARTING_BATTERY)
-	_scent_bar = _stat_row(stats, &"scent", "Scent", BLOOD, 0.0)
 
 	# The reticle: a dot, or a ring over something you can use.
 	_reticle_dot = _disc(Color(BONE, 0.55), Color(0.0, 0.0, 0.0, 0.0), 0)
@@ -342,7 +342,7 @@ func _build() -> void:
 	_end_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	var hint: Label = _label(end_box, 12, ASH, _font_caps)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint.text = "R     BEGIN THE NIGHT AGAIN"
+	hint.text = "R     BEGIN THE NIGHT AGAIN          ESC     MAIN MENU"
 
 
 func _label(parent: Control, font_size: int, color: Color, font: Font) -> Label:
@@ -451,10 +451,6 @@ func _on_panic_changed(value: float, tier: int) -> void:
 	_panic_bar.add_theme_stylebox_override("fill", _flat(PANIC_COLORS[tier]))
 
 
-func _refresh_scent() -> void:
-	_scent_bar.value = ScentManager.raw_scent_level
-
-
 func _refresh_status() -> void:
 	var stats: PlayerStats = _player.stats
 	# A stat only earns its place on screen while it is off its resting value.
@@ -462,7 +458,6 @@ func _refresh_status() -> void:
 	_fade_targets[_stat_rows[&"panic"]] = 1.0 if _panic >= 5.0 else 0.0
 	_fade_targets[_stat_rows[&"battery"]] = 1.0 if _player.phone.is_flashlight_on or _player.phone.is_phone_out \
 		or stats.phone_battery <= 20.0 else 0.0
-	_fade_targets[_stat_rows[&"scent"]] = 1.0 if ScentManager.raw_scent_level > 1.0 else 0.0
 
 	var parts: Array[String] = [stats.get_footwear_name()]
 	if stats.is_bleeding:

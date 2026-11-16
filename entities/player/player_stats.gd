@@ -6,7 +6,7 @@ extends Node
 ## to the signals it sends through EventBus.
 
 enum Footwear { SCHOOL_SHOES, SOCKS, BAREFOOT }
-enum PanicTier { GROUNDED, UNEASY, RATTLED, KULBA }
+enum PanicTier { GROUNDED, UNEASY, RATTLED, TERROR }
 
 const MAX_VALUE: float = 100.0
 const STARTING_BATTERY: float = 100.0
@@ -172,7 +172,7 @@ func _update_panic(delta: float) -> void:
 		_set_panic(panic + rate * delta)
 
 
-## 0..1 for the closest real Aswang within 9 m.
+## 0..1 for the closest active robot within 9 m.
 func _get_threat_pressure() -> float:
 	if _body == null:
 		return 0.0
@@ -184,8 +184,6 @@ func _get_threat_pressure() -> float:
 		var distance: float = threat.global_position.distance_to(_body.global_position)
 		pressure = maxf(pressure, 1.0 - distance / PANIC_THREAT_RADIUS)
 	return clampf(pressure, 0.0, 1.0)
-
-
 
 
 func _set_panic(value: float) -> void:
@@ -202,7 +200,7 @@ func _set_panic(value: float) -> void:
 			EventBus.panic_threshold_crossed.emit(threshold, false)
 	var tier: PanicTier = PanicTier.GROUNDED
 	if panic >= TIER_LIMITS[2]:
-		tier = PanicTier.KULBA
+		tier = PanicTier.TERROR
 	elif panic >= TIER_LIMITS[1]:
 		tier = PanicTier.RATTLED
 	elif panic >= TIER_LIMITS[0]:

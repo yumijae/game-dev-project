@@ -15,8 +15,6 @@ enum State { OPEN, CLOSED, TAPED_BLACKOUT, SHATTERED }
 const LAYER_INTERACT: int = 2
 const LAYER_GLASS: int = 16
 const TAPE_TIME: float = 4.0
-const SALT_TIME: float = 3.0
-const SALT_STUN: float = 15.0
 const CRANK_NOISE: float = 4.0
 const SHATTER_NOISE: float = 18.0
 const SMALL_WINDOW_HEIGHT: float = 1.0
@@ -41,7 +39,6 @@ const JUDDER: float = 0.0012         # metres of vertical rattle at full speed
 @export var initial_state: State = State.CLOSED
 
 var state: State = State.CLOSED
-var is_salted: bool = false
 
 var _slats: Node3D = null
 var _sashes: Node3D = null
@@ -50,7 +47,6 @@ var _slide: float = 0.0          # 0 = shut, 1 = open (visual only)
 var open_side: int = 1
 var _tween: Tween = null
 var _tape: MeshInstance3D = null
-var _salt: MeshInstance3D = null
 
 static var _materials: Dictionary = {}
 static var _meshes: Dictionary = {}
@@ -169,12 +165,6 @@ static func create(window_width: float, window_height: float, outward: Vector3, 
 	tape.position.z = -0.065   # in front of the sash pulls
 	tape.visible = false
 	window.add_child(tape)
-	var salt := MeshInstance3D.new()
-	salt.name = "Salt"
-	salt.mesh = _box_mesh(Vector3(window_width - 0.1, 0.012, 0.08), &"salt")
-	salt.position = Vector3(0.0, -window_height * 0.5 - 0.004, -0.1)
-	salt.visible = false
-	window.add_child(salt)
 	return window
 
 
@@ -183,7 +173,6 @@ func _ready() -> void:
 	_slats = get_node_or_null("Slats") as Node3D
 	_sashes = get_node_or_null("Sashes") as Node3D
 	_tape = get_node_or_null("Tape") as MeshInstance3D
-	_salt = get_node_or_null("Salt") as MeshInstance3D
 	state = initial_state
 	_apply_state()
 
@@ -281,15 +270,7 @@ func _finish_tape(player: PlayerController) -> void:
 	EventBus.ui_notification.emit("Blacked out. No light gets through this window.", 2.5)
 
 
-func _finish_salt(player: PlayerController) -> void:
-	if is_salted or true:
-		return
-	is_salted = true
-	if _salt != null:
-		_salt.visible = true
-
-
-# ----------------------------------------------------------------- Aswang API
+# ------------------------------------------------------------------ Robot API
 
 ## Smashes the glass and scatters shards on the floor just inside.
 func shatter(_attacker: Node3D = null) -> void:
@@ -303,19 +284,6 @@ func shatter(_attacker: Node3D = null) -> void:
 	floor_point.y = Campus.floor_y(get_floor_index())
 	BrokenGlassHazard.spawn(get_tree().current_scene, floor_point, Vector2(width + 0.6, 1.5), rotation.y)
 	EventBus.glass_shattered.emit(self, global_position)
-
-
-## Salt on the sill burns the first Aswang that tries to come through.
-func trigger_salt(aswang: Hostile) -> bool:
-	if not is_salted:
-		return false
-	is_salted = false
-	if _salt != null:
-		_salt.visible = false
-	SfxSynth.play_at(self, SfxSynth.growl(), global_position, 2.0, 1.4)
-	EventBus.salt_barrier_triggered.emit(self, aswang)
-	aswang.stun(SALT_STUN, &"salt")
-	return true
 
 
 # -------------------------------------------------------------------- visuals
@@ -458,8 +426,5 @@ static func _material(key: StringName) -> StandardMaterial3D:
 		&"tape":
 			material.albedo_color = Color(0.03, 0.03, 0.035)
 			material.roughness = 0.95
-		&"salt":
-			material.albedo_color = Color(0.95, 0.95, 0.92)
-			material.roughness = 1.0
 	_materials[key] = material
 	return material

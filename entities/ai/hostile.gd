@@ -2,7 +2,7 @@ class_name Hostile
 extends CharacterBody3D
 ## Base for every threat in the school (the Expo robots). The rest of the game
 ## only talks to threats through this: doors describe what stands on the far
-## side, the player is hit by one, fear rises near one, salt / bottles / the
+## side, the player is hit by one, fear rises near one, bottles and the
 ## extinguisher stun or blind one.
 ##
 ## Groups: "hostiles" (every instance) and "hostile_presence" (only while it is

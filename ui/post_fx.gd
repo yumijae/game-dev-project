@@ -6,11 +6,11 @@ extends CanvasLayer
 ##   Panic     -> heartbeat pulse, tunnel vision, colour drain, wobble
 ##   Bleeding  -> blood veins at the screen edge
 ##   Wounded   -> a red flash and a jolt of static
-##   Glass shattering / Tiktik berserk -> a burst of static
+##   Glass shattering -> a burst of static
 
 const SHADER: Shader = preload("res://shaders/post_horror.gdshader")
 const CALM_HEART_RATE: float = 1.0
-const KULBA_HEART_RATE: float = 2.4
+const TERROR_HEART_RATE: float = 2.4
 
 var _material: ShaderMaterial = null
 var _panic: float = 0.0
@@ -37,7 +37,6 @@ func _ready() -> void:
 	EventBus.bleeding_changed.connect(_on_bleeding_changed)
 	EventBus.player_wounded.connect(_on_player_wounded)
 	EventBus.glass_shattered.connect(_on_glass_shattered)
-	EventBus.tiktik_berserk.connect(_on_tiktik_berserk)
 	EventBus.game_lost.connect(_on_game_lost)
 
 
@@ -46,7 +45,7 @@ func _process(delta: float) -> void:
 	_bleeding = move_toward(_bleeding, _bleeding_target, delta * 0.8)
 	_hit_flash = move_toward(_hit_flash, 0.0, delta * 1.4)
 	_static_burst = move_toward(_static_burst, 0.0, delta * 2.2)
-	_heartbeat_phase = fmod(_heartbeat_phase + delta * lerpf(CALM_HEART_RATE, KULBA_HEART_RATE, _panic), 1.0)
+	_heartbeat_phase = fmod(_heartbeat_phase + delta * lerpf(CALM_HEART_RATE, TERROR_HEART_RATE, _panic), 1.0)
 	_material.set_shader_parameter(&"panic", _panic)
 	_material.set_shader_parameter(&"bleeding", _bleeding)
 	_material.set_shader_parameter(&"hit_flash", _hit_flash)
@@ -69,10 +68,6 @@ func _on_player_wounded(_source: StringName) -> void:
 
 func _on_glass_shattered(_glass: Node3D, _point: Vector3) -> void:
 	_static_burst = maxf(_static_burst, 0.45)
-
-
-func _on_tiktik_berserk(_position: Vector3) -> void:
-	_static_burst = 1.0
 
 
 func _on_game_lost(_cause: String) -> void:

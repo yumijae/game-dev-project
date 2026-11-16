@@ -4,9 +4,7 @@ extends StaticBody3D
 ## restroom stall (#9, #10, #19, #20), the kneehole of a teacher's desk, or the
 ## space under a PC bench.
 ##
-## Hiding breaks line of sight, but not the nose or the ears: a scent trail
-## that ends here, or ragged breathing below 30% Stamina, still leads an
-## Aswang to the door.
+## Hiding breaks line of sight: a robot that did not see Juan go in loses him.
 
 const LAYER_INTERACT: int = 2
 

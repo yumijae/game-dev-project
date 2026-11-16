@@ -9,7 +9,7 @@ const MIX_RATE: int = 22050
 static var _cache: Dictionary = {}
 
 
-## The Tiktik's click: a dry, bright tick.
+## A dry, bright tick: UI clicks and SCUTTLE's legs.
 static func click() -> AudioStreamWAV:
 	return _cached(&"click", func() -> PackedFloat32Array:
 		var samples: PackedFloat32Array = _silence(0.05)
@@ -81,7 +81,7 @@ static func glass_crunch() -> AudioStreamWAV:
 		return samples)
 
 
-## The kampana: one toll of a bronze bell.
+## One toll of a bronze bell.
 static func bell() -> AudioStreamWAV:
 	return _cached(&"bell", func() -> PackedFloat32Array:
 		var samples: PackedFloat32Array = _silence(2.8)
@@ -103,22 +103,6 @@ static func server_hum() -> AudioStreamWAV:
 			var t: float = float(i) / MIX_RATE
 			samples[i] = sin(TAU * 60.0 * t) * 0.35 + sin(TAU * 120.0 * t) * 0.25 \
 				+ sin(TAU * 300.0 * t) * 0.08 + sin(TAU * 1000.0 * t) * 0.03
-		return samples)
-
-
-## Breathy, unintelligible whispering.
-static func whisper() -> AudioStreamWAV:
-	return _cached(&"whisper", func() -> PackedFloat32Array:
-		var samples: PackedFloat32Array = _silence(1.6)
-		var band: float = 0.0
-		var previous: float = 0.0
-		for i: int in samples.size():
-			var t: float = float(i) / MIX_RATE
-			var white: float = randf_range(-1.0, 1.0)
-			band = lerpf(band, white - previous, 0.35)
-			previous = white
-			var syllables: float = maxf(sin(TAU * 4.3 * t) * sin(TAU * 1.7 * t + 0.6), 0.0)
-			samples[i] = band * syllables * sin(PI * t / 1.6) * 1.4
 		return samples)
 
 
@@ -222,31 +206,6 @@ static func gasp() -> AudioStreamWAV:
 			var t: float = float(i) / MIX_RATE
 			band = lerpf(band, randf_range(-1.0, 1.0), 0.45)
 			samples[i] = band * sin(PI * t / 0.55) * (0.6 + 0.4 * sin(TAU * 700.0 * t)) * 0.9
-		return samples)
-
-
-## A wet animal snarl for the Aswang.
-static func growl() -> AudioStreamWAV:
-	return _cached(&"growl", func() -> PackedFloat32Array:
-		var samples: PackedFloat32Array = _silence(1.1)
-		var low: float = 0.0
-		for i: int in samples.size():
-			var t: float = float(i) / MIX_RATE
-			low = lerpf(low, randf_range(-1.0, 1.0), 0.12)
-			var throat: float = signf(sin(TAU * 54.0 * t)) * 0.35 + sin(TAU * 81.0 * t) * 0.4
-			samples[i] = (throat + low * 0.7) * (0.6 + 0.4 * sin(TAU * 19.0 * t)) * sin(PI * t / 1.1)
-		return samples)
-
-
-## Leathery wing beat for the Manananggal.
-static func wing_flap() -> AudioStreamWAV:
-	return _cached(&"flap", func() -> PackedFloat32Array:
-		var samples: PackedFloat32Array = _silence(0.35)
-		var low: float = 0.0
-		for i: int in samples.size():
-			var t: float = float(i) / MIX_RATE
-			low = lerpf(low, randf_range(-1.0, 1.0), 0.06)
-			samples[i] = low * sin(PI * t / 0.35) * 1.6
 		return samples)
 
 

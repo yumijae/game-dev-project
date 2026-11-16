@@ -61,8 +61,6 @@ const ROOMS: Array[Dictionary] = [
 
 ## Rooms whose corridor wall is a half-wall with wide plate-glass viewing bays.
 const GLASS_LAB_ROOM_IDS: Array[int] = [7, 8, 13, 24, 27]
-## Damp, dark rooms where the Manananggal may leave her lower torso.
-const TORSO_ROOM_IDS: Array[int] = [6, 9, 10, 19, 20, 26]
 
 
 ## 0 = 1F, 1 = 2F, 2 = 3F, 3 = 4F, 4 = Rooftop.

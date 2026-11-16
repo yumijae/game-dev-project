@@ -1,9 +1,9 @@
 class_name RehasGate
 extends StaticBody3D
-## The Rehas roll-up security gate across the 1F Main Lobby entrance.
+## The roll-up security gate across the 1F Main Lobby entrance.
 ##
-## It opens when the morning guard arrives (5:30 AM, or 3:30 AM after the
-## rooftop SOS). Juan can also force it early: with the Master Rehas Key for
+## It opens when the morning guard arrives (6:00 AM, or 3:30 AM after the
+## rooftop SOS). Juan can also force it early: with the Master Gate Key for
 ## the padlock and bolt cutters or a crowbar for the chained track, a 20-second
 ## breach that everything in the building can hear. Progress is kept if he has
 ## to break off and fight.

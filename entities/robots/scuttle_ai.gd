@@ -10,6 +10,10 @@ extends RobotBase
 ##     door (HeavyProp gap block), the one thing that keeps it out.
 ##   - Hunts by sound. It only sees Juan within a few metres.
 ##   - Its skittering clicks give it away before it arrives.
+##   - The model is one rigid piece (legs included), so the whole body is
+##     animated (_process): it waggles and bobs as it runs, twitches when it
+##     stops, hops when it spots Juan, rears up just before it strikes,
+##     wriggles under doors and thrashes when sprayed.
 
 enum State { DOCKED, ROAM, INVESTIGATE, CHASE, OFF }
 
@@ -20,6 +24,10 @@ const SQUEEZE_TIME: float = 1.3
 const LOSE_TIME: float = 3.0
 const RETREAT_TIME: float = 9.0
 const CLICK_INTERVAL: float = 0.085
+## In a chase it rears up once Juan is this close: the last warning.
+const REAR_RANGE: float = 2.6
+## It runs in bursts: after reaching a spot it holds still and listens.
+const PAUSE_TIME := Vector2(0.3, 0.9)
 
 var state: State = State.DOCKED
 
@@ -31,6 +39,16 @@ var _door_timer: float = 0.0
 var _click_timer: float = 0.0
 var _squeezing: bool = false
 var _gait: float = 0.0
+# Body animation (see _process).
+var _anim_time: float = 0.0
+## One-shot gestures, each counting down from 1 to 0.
+var _hop: float = 0.0
+var _pounce: float = 0.0
+## Idle twitches: a sudden small turn, held, then another.
+var _twitch_timer: float = 1.0
+var _twitch_yaw: float = 0.0
+var _tipped: float = 0.0
+var _pause_timer: float = 0.0
 
 
 func _init() -> void:
@@ -71,10 +89,12 @@ func _on_shutdown() -> void:
 
 func _on_attack_landed(fatal: bool) -> void:
 	SfxSynth.play_at(self, SfxSynth.clatter(), global_position + Vector3.UP * 0.3, 0.0, 1.8)
+	_pounce = 1.0
 	if not fatal:
 		_retreat_timer = RETREAT_TIME
 		state = State.ROAM
-		_target = random_nav_point(global_position, 10.0)
+		_target = retreat_point()
+		_roam_timer = RETREAT_TIME
 
 
 # ---------------------------------------------------------------------- tick
@@ -96,6 +116,12 @@ func _tick(delta: float) -> void:
 			speed = CHASE_SPEED
 			if knows_where():
 				_target = last_known
+	if state == State.CHASE:
+		_pause_timer = 0.0
+	elif _pause_timer > 0.0:
+		_pause_timer -= delta
+		ground_idle(delta)
+		return
 	if _handle_door(delta):
 		return
 	if stuck_count >= 3:
@@ -107,6 +133,7 @@ func _tick(delta: float) -> void:
 	if state == State.CHASE and _retreat_timer <= 0.0:
 		try_attack_player()
 	if arrived:
+		_pause_timer = randf_range(PAUSE_TIME.x, PAUSE_TIME.y)
 		if state == State.INVESTIGATE:
 			state = State.ROAM
 			_target = random_nav_point(global_position, 4.0)
@@ -119,6 +146,8 @@ func _sense(delta: float) -> void:
 	if player == null or player.is_dead or _retreat_timer > 0.0:
 		return
 	if can_see_player():
+		if state != State.CHASE:
+			_hop = 1.0
 		state = State.CHASE
 		remember(player.global_position)
 		_lose_timer = LOSE_TIME
@@ -134,10 +163,14 @@ func _on_heard(origin: Vector3, _noise_type: StringName, audibility: float) -> v
 		return
 	state = State.INVESTIGATE
 	_target = origin
+	_pause_timer = 0.0
 
 
 func _pick_roam_target() -> void:
 	_roam_timer = randf_range(6.0, 12.0)
+	if _retreat_timer > 0.0:
+		_target = retreat_point()
+		return
 	var around: Vector3 = global_position
 	if knows_where():
 		around = point_along_route(last_known, 10.0)
@@ -200,16 +233,84 @@ func _squeeze_under(door: InteractableDoor) -> void:
 
 # ------------------------------------------------------------------ movement
 
-## Clicks and a jittery little bob while it runs.
+## Clicks while it runs; the gait phase drives the body animation.
 func _skitter(delta: float) -> void:
 	var speed: float = Vector2(velocity.x, velocity.z).length()
 	if speed < 0.4:
-		model.position.y = move_toward(model.position.y, 0.0, delta)
 		return
 	_gait += delta * speed * 9.0
-	model.position.y = absf(sin(_gait)) * 0.018
-	model.rotation.z = sin(_gait * 0.5) * 0.04
 	_click_timer -= delta
 	if _click_timer <= 0.0:
 		_click_timer = CLICK_INTERVAL * (CHASE_SPEED / maxf(speed, 1.0)) * 0.6
 		SfxSynth.play_at(self, SfxSynth.click(), global_position + Vector3.UP * 0.1, -22.0, randf_range(1.3, 1.9), 12.0)
+
+
+# ---------------------------------------------------------------- animation
+
+## Moves the whole body on top of wherever the AI has put it. Runs even while
+## stunned or squeezing under a door. (Positive pitch tips the nose down.)
+func _process(delta: float) -> void:
+	if model == null:
+		return
+	_anim_time += delta
+	var t: float = _anim_time
+	if state == State.OFF or state == State.DOCKED:
+		if state == State.OFF:
+			# Dead on the floor, tipped onto one set of legs.
+			_tipped = move_toward(_tipped, 1.0, delta * 3.0)
+			model.rotation = Vector3(0.0, PI, 0.3 * _tipped)
+		return
+	_tipped = 0.0
+	_hop = move_toward(_hop, 0.0, delta * 3.2)
+	_pounce = move_toward(_pounce, 0.0, delta * 3.0)
+	var speed: float = Vector2(velocity.x, velocity.z).length()
+	var run: float = clampf(speed / CHASE_SPEED, 0.0, 1.0)
+	var pitch: float = 0.0
+	var roll: float = 0.0
+	var yaw: float = 0.0
+	var lift: float = 0.0
+	if stun_time_left > 0.0:
+		# Sensors whited out: it thrashes on the spot.
+		var fade: float = clampf(stun_time_left / 1.2, 0.3, 1.0)
+		roll = sin(t * 41.0) * 0.28 * fade
+		pitch = sin(t * 29.0) * 0.16 * fade
+		yaw = sin(t * 17.0) * 0.5 * fade
+		lift = absf(sin(t * 23.0)) * 0.03 * fade
+	elif _squeezing:
+		# Flat under the door, wriggling through.
+		yaw = sin(t * 26.0) * 0.22
+		roll = sin(t * 19.0) * 0.05
+	elif speed > 0.4:
+		# Running: the body swings side to side over its legs, nose down.
+		yaw = sin(_gait * 0.5) * lerpf(0.07, 0.16, run)
+		roll = sin(_gait * 0.5 + 1.2) * lerpf(0.04, 0.09, run)
+		pitch = 0.1 * run
+		lift = absf(sin(_gait)) * lerpf(0.012, 0.022, run)
+	else:
+		# Stopped: holds dead still, then snaps a little way round.
+		_twitch_timer -= delta
+		if _twitch_timer <= 0.0:
+			_twitch_timer = randf_range(0.25, 1.4)
+			_twitch_yaw = randf_range(-0.5, 0.5)
+		yaw = _twitch_yaw
+		lift = -0.01
+		if _door_timer > 0.0:
+			# Gap blocked: digs at the bottom of the door.
+			pitch = 0.18 + maxf(sin(t * 16.0), 0.0) * 0.14
+	if state == State.CHASE and _retreat_timer <= 0.0 and stun_time_left <= 0.0 and not _squeezing \
+			and player != null and get_player_distance() < REAR_RANGE:
+		# About to strike: front legs up.
+		var close: float = 1.0 - clampf((get_player_distance() - catch_distance) / (REAR_RANGE - catch_distance), 0.0, 1.0)
+		pitch -= 0.55 * close
+		lift += 0.05 * close
+	# Spotted him: a startled hop.
+	pitch -= sin(_hop * PI) * 0.35
+	lift += sin(_hop * PI) * 0.09
+	# The strike itself: slams forward and down.
+	pitch += sin(_pounce * PI) * 0.6
+	var snap: float = minf(delta * 22.0, 1.0)
+	model.rotation.x = lerpf(model.rotation.x, pitch, snap)
+	model.rotation.z = lerpf(model.rotation.z, roll, snap)
+	# Twitches are instant; everything else eases.
+	model.rotation.y = PI + (yaw if speed <= 0.4 and stun_time_left <= 0.0 and not _squeezing else lerpf(model.rotation.y - PI, yaw, snap))
+	model.position.y = lerpf(model.position.y, lift, snap)

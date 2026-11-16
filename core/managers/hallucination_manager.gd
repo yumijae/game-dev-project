@@ -6,12 +6,13 @@ extends Node
 ##    tiers (Grounded / Uneasy / Rattled / Terror).
 ## 2. Mechanical hallucinations that grow with Panic. None of them are real,
 ##    and the game never lies about that to the tools that tell truth:
-##    a hallucination spawns NO ceiling dust, casts NO shadow under a door,
-##    and NEVER makes the Flask of Lana boil.
+##    a hallucination makes no noise a robot can hear, never shows on the
+##    CCTV, and casts NO shadow under a door.
 ##
 ##    35%+  phantom phone vibrations; a footstep that echoes one step late
-##    60%+  3 seconds of quiet Tiktik clicking overhead; shaky reticle (HUD)
-##    85%+  doors whispering in groupmates' voices; blood drops that fade
+##    60%+  a servo whirring close by that is not there; shaky reticle (HUD)
+##    85%+  a greeter's voice behind a closed door; a standby light in the
+##          dark ahead that fades when he looks at it
 ##    95%+  an involuntary gasp every 20 s unless stifled in time
 
 const MONOLOGUE: Dictionary = {
@@ -29,37 +30,41 @@ const MONOLOGUE: Dictionary = {
 	],
 	PlayerStats.PanicTier.RATTLED: [
 		"My hands are shaking. I can't hold anything properly.",
-		"Something is ticking in the ceiling. Near or far? I can't tell any more.",
-		"Excuse me... just passing through... excuse me...",
+		"Was that a servo? Near or far? I can't tell any more.",
+		"It's a school project. It's just a school project.",
 		"I am so afraid. This isn't real. This isn't real.",
 	],
-	PlayerStats.PanicTier.KULBA: [
+	PlayerStats.PanicTier.TERROR: [
 		"I can't. I can't. I can't breathe.",
-		"Was that Mark? No. That was not Mark.",
-		"Lord, help me.",
-		"Our Father, who art in heaven... who art in heaven...",
+		"It moved. I looked away for one second and it moved.",
+		"Please. Please. I just want to go home.",
+		"Don't blink. Don't blink. Don't blink.",
 	],
 }
 
-const WHISPER_LINES: Array[String] = [
-	"Juan... open up. It's us.",
-	"Juan, the defense is over. Let's go home.",
-	"We're right outside, man. Why are you hiding?",
-	"Juan... Juan... the door is open, isn't it?",
+## The greeter robot's canned lines, heard through a door nothing stands behind.
+const DOOR_VOICE_LINES: Array[String] = [
+	"Welcome to the Tech Expo. May I see your visitor pass?",
+	"Good evening. This room is closed. Please step outside.",
+	"Hello. I can see you. Would you like directions?",
+	"Please remain where you are. An attendant is on the way.",
 ]
 
 const VIBRATION_PANIC: float = 35.0
-const TIKTIK_PANIC: float = 60.0
+const SERVO_PANIC: float = 60.0
 const WHISPER_PANIC: float = 85.0
 const GASP_PANIC: float = 95.0
 const GASP_INTERVAL: float = 20.0
 const GASP_WINDOW: float = 1.6
-const FALSE_TIKTIK_TIME: float = 3.0
-const FALSE_BLOOD_TIME: float = 3.0
-## Phantom ticks overhead (what the old Tiktik sounded like up close).
-const FALSE_CLICK_INTERVAL: float = 0.8
-const FALSE_CLICK_VOLUME_DB: float = -22.0
-const FALSE_CLICK_PITCH: float = 0.82
+const FALSE_SERVO_TIME: float = 3.0
+const FALSE_LIGHT_TIME: float = 3.0
+## Phantom servo whirs, a few steps off in the dark.
+const FALSE_SERVO_INTERVAL: float = 0.9
+const FALSE_SERVO_VOLUME_DB: float = -20.0
+## A robot's standby LED: the orange of PROTOTYPE's eye.
+## Brighter than white so it blooms like a real LED instead of a flat dot.
+const FALSE_LIGHT_COLOR: Color = Color(4.0, 1.5, 0.3)
+const FALSE_LIGHT_MAX_DISTANCE: float = 9.0
 const WHISPER_DOOR_RANGE: float = 8.0
 const WHISPER_TIME: float = 8.0
 const ECHO_DELAY: float = 0.55
@@ -67,14 +72,15 @@ const ECHO_DELAY: float = 0.55
 var _player: PlayerController = null
 var _monologue_timer: float = 6.0
 var _vibration_timer: float = 20.0
-var _tiktik_timer: float = 18.0
+var _servo_timer: float = 18.0
 var _whisper_timer: float = 12.0
-var _blood_timer: float = 9.0
+var _light_timer: float = 9.0
 var _gasp_timer: float = GASP_INTERVAL
 var _echo_pending: bool = false
 var _echo_timer: float = 0.0
-var _false_tiktik_left: float = 0.0
-var _false_click_timer: float = 0.0
+var _false_servo_left: float = 0.0
+var _false_servo_timer: float = 0.0
+var _false_servo_bearing: float = 0.0
 var _last_line: String = ""
 
 
@@ -92,27 +98,27 @@ func _process(delta: float) -> void:
 	var panic: float = _player.stats.panic
 	_update_monologue(delta)
 	_update_echo(delta, panic)
-	_update_false_tiktik(delta)
+	_update_false_servo(delta)
 	if panic >= VIBRATION_PANIC:
 		_vibration_timer -= delta
 		if _vibration_timer <= 0.0:
 			_vibration_timer = randf_range(25.0, 45.0)
 			_player.phone.phantom_vibrate()
 			EventBus.hallucination_started.emit(&"phantom_vibration", _player.global_position)
-	if panic >= TIKTIK_PANIC:
-		_tiktik_timer -= delta
-		if _tiktik_timer <= 0.0:
-			_tiktik_timer = randf_range(28.0, 48.0)
-			_start_false_tiktik()
+	if panic >= SERVO_PANIC:
+		_servo_timer -= delta
+		if _servo_timer <= 0.0:
+			_servo_timer = randf_range(28.0, 48.0)
+			_start_false_servo()
 	if panic >= WHISPER_PANIC:
 		_whisper_timer -= delta
 		if _whisper_timer <= 0.0:
 			_whisper_timer = randf_range(24.0, 38.0)
 			_whisper_at_door()
-		_blood_timer -= delta
-		if _blood_timer <= 0.0:
-			_blood_timer = randf_range(18.0, 28.0)
-			_spawn_false_blood()
+		_light_timer -= delta
+		if _light_timer <= 0.0:
+			_light_timer = randf_range(18.0, 28.0)
+			_spawn_false_light()
 	if panic >= GASP_PANIC:
 		_gasp_timer -= delta
 		if _gasp_timer <= 0.0:
@@ -169,29 +175,34 @@ func _update_echo(delta: float, panic: float) -> void:
 	EventBus.hallucination_started.emit(&"echo_footstep", behind)
 
 
-# --------------------------------------------------------- 60%+ false Tiktik
+# ---------------------------------------------------------- 60%+ false servo
 
-## Close-sounding clicks overhead. No dust falls and the Lana stays still.
-func _start_false_tiktik() -> void:
-	_false_tiktik_left = FALSE_TIKTIK_TIME
-	_false_click_timer = 0.0
-	EventBus.hallucination_started.emit(&"false_tiktik", _player.global_position + Vector3.UP * 2.6)
+## A motor whirring a few steps away, from one direction, for three seconds.
+## Audio only: nothing is there, and no robot hears it.
+func _start_false_servo() -> void:
+	_false_servo_left = FALSE_SERVO_TIME
+	_false_servo_timer = 0.0
+	_false_servo_bearing = randf() * TAU
+	EventBus.hallucination_started.emit(&"false_servo", _false_servo_point())
 
 
-func _update_false_tiktik(delta: float) -> void:
-	if _false_tiktik_left <= 0.0:
+func _false_servo_point() -> Vector3:
+	return _player.global_position + Vector3(cos(_false_servo_bearing), 0.0, sin(_false_servo_bearing)) * 3.5 + Vector3.UP * 0.9
+
+
+func _update_false_servo(delta: float) -> void:
+	if _false_servo_left <= 0.0:
 		return
-	_false_tiktik_left -= delta
-	_false_click_timer -= delta
-	if _false_click_timer <= 0.0:
-		_false_click_timer = FALSE_CLICK_INTERVAL * randf_range(0.8, 1.1)
-		var overhead: Vector3 = _player.global_position + Vector3(randf_range(-0.8, 0.8), 2.6, randf_range(-0.8, 0.8))
-		SfxSynth.play_at(self, SfxSynth.click(), overhead, FALSE_CLICK_VOLUME_DB, FALSE_CLICK_PITCH, 10.0)
+	_false_servo_left -= delta
+	_false_servo_timer -= delta
+	if _false_servo_timer <= 0.0:
+		_false_servo_timer = FALSE_SERVO_INTERVAL * randf_range(0.8, 1.2)
+		SfxSynth.play_at(self, SfxSynth.servo(), _false_servo_point(), FALSE_SERVO_VOLUME_DB, randf_range(0.85, 1.0), 10.0)
 
 
-# -------------------------------------------------------- 85%+ doors & blood
+# -------------------------------------------------------- 85%+ doors & light
 
-## A nearby closed door whispers in a groupmate's voice. Nothing stands
+## The greeter's voice comes through a nearby closed door. Nothing stands
 ## outside: peeking under it shows no shadow at all.
 func _whisper_at_door() -> void:
 	var best: InteractableDoor = null
@@ -208,39 +219,48 @@ func _whisper_at_door() -> void:
 		return
 	best.hallucination_time_left = WHISPER_TIME
 	var at: Vector3 = best.get_center() + Vector3.UP * 1.2
-	SfxSynth.play_at(self, SfxSynth.whisper(), at, -4.0, 1.0, 14.0)
-	EventBus.ui_subtitle.emit(WHISPER_LINES[randi() % WHISPER_LINES.size()], 4.5, &"whisper")
+	SfxSynth.play_at(self, SfxSynth.servo(), at, -10.0, 0.7, 14.0)
+	EventBus.ui_subtitle.emit(DOOR_VOICE_LINES[randi() % DOOR_VOICE_LINES.size()], 4.5, &"door_voice")
 	EventBus.hallucination_started.emit(&"whisper_door", at)
 
 
-## Blood drops on the floor ahead that are gone three seconds later.
-func _spawn_false_blood() -> void:
+## A small orange standby light at robot head height in the dark ahead,
+## gone three seconds later. It is placed short of the first wall in the way,
+## so it never shines through one.
+func _spawn_false_light() -> void:
 	var scene: Node = get_tree().current_scene
 	if scene == null:
 		return
+	var eye: Vector3 = _player.head.global_position
 	var forward: Vector3 = -_player.global_transform.basis.z
+	var distance: float = FALSE_LIGHT_MAX_DISTANCE
+	var query := PhysicsRayQueryParameters3D.create(eye, eye + forward * FALSE_LIGHT_MAX_DISTANCE, 1 | 8)
+	var hit: Dictionary = _player.get_world_3d().direct_space_state.intersect_ray(query)
+	if not hit.is_empty():
+		distance = eye.distance_to(hit["position"]) - 0.4
+	# Too close to be anything but a dot on the wall in front of him.
+	if distance < 3.0:
+		return
 	var material := StandardMaterial3D.new()
-	material.albedo_color = ScentBreadcrumb.BLOOD_COLOR
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = FALSE_LIGHT_COLOR
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.roughness = 0.25
-	var holder := Node3D.new()
-	holder.name = "FalseBlood"
-	scene.add_child(holder)
-	holder.global_position = _player.global_position
-	for i: int in randi_range(5, 8):
-		var mesh := CylinderMesh.new()
-		mesh.top_radius = randf_range(0.03, 0.07)
-		mesh.bottom_radius = mesh.top_radius
-		mesh.height = 0.004
-		mesh.radial_segments = 10
-		mesh.material = material
-		var drop := MeshInstance3D.new()
-		drop.mesh = mesh
-		drop.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		holder.add_child(drop)
-		drop.position = forward * (1.0 + 0.45 * float(i)) + Vector3(randf_range(-0.2, 0.2), 0.014, randf_range(-0.2, 0.2))
-	var tween: Tween = holder.create_tween()
-	tween.tween_interval(FALSE_BLOOD_TIME * 0.6)
-	tween.tween_property(material, "albedo_color:a", 0.0, FALSE_BLOOD_TIME * 0.4)
-	tween.tween_callback(holder.queue_free)
-	EventBus.hallucination_started.emit(&"false_blood", holder.global_position)
+	# An LED cuts through the haze; fog would swallow it at this size.
+	material.disable_fog = true
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.03
+	mesh.height = 0.06
+	mesh.radial_segments = 8
+	mesh.rings = 4
+	mesh.material = material
+	var dot := MeshInstance3D.new()
+	dot.name = "FalseLight"
+	dot.mesh = mesh
+	dot.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	scene.add_child(dot)
+	dot.global_position = eye + forward * distance + Vector3(randf_range(-0.6, 0.6), randf_range(-0.25, 0.1), 0.0)
+	var tween: Tween = dot.create_tween()
+	tween.tween_interval(FALSE_LIGHT_TIME * 0.6)
+	tween.tween_property(material, "albedo_color:a", 0.0, FALSE_LIGHT_TIME * 0.4)
+	tween.tween_callback(dot.queue_free)
+	EventBus.hallucination_started.emit(&"false_light", dot.global_position)

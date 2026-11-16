@@ -29,6 +29,8 @@ const STEP_INTERVAL: float = 0.32
 const FREEZE_CLICK_RANGE: float = 10.0
 const GIVE_UP_DOOR_TIME: float = 5.0
 const RETREAT_TIME: float = 9.0
+## Caught this close, it freezes mid-lunge.
+const LUNGE_RANGE: float = 2.6
 
 var state: State = State.DOCKED
 ## True while something watches it (this physics frame).
@@ -43,6 +45,12 @@ var _door: InteractableDoor = null
 var _door_timer: float = 0.0
 var _retreat_timer: float = 0.0
 var _skeleton: Skeleton3D = null
+## Which leg leads in the current stride; swaps on every footfall.
+var _left_leads: bool = false
+## Height of the lowest foot bone with the legs straight, and the model's own
+## resting height: a posed leg lifts its foot, so the body is lowered to match.
+var _foot_rest_y: float = INF
+var _model_rest_y: float = 0.0
 var _hunch_timer: float = 30.0
 
 
@@ -69,6 +77,11 @@ func get_feet_description() -> String:
 
 # ------------------------------------------------------------------ lifecycle
 
+## On its dock before midnight: powered down, head bowed.
+func _on_built() -> void:
+	_set_pose.call_deferred("slump")
+
+
 func _on_activated() -> void:
 	state = State.ROAM
 	_pick_roam_target()
@@ -88,7 +101,8 @@ func _on_attack_landed(fatal: bool) -> void:
 		# Backs off and waits for the next chance.
 		_retreat_timer = RETREAT_TIME
 		state = State.ROAM
-		_target = random_nav_point(global_position, ROAM_RADIUS)
+		_target = retreat_point()
+		_roam_timer = ROAM_REPICK
 
 
 # ---------------------------------------------------------------------- tick
@@ -163,6 +177,9 @@ func _pick_roam_target() -> void:
 	if player == null:
 		_target = random_nav_point(global_position, ROAM_RADIUS)
 		return
+	if _retreat_timer > 0.0:
+		_target = retreat_point()
+		return
 	# Heads for where it last saw or heard him; with no lead, a vague hunch
 	# every so often, otherwise it just wanders.
 	if knows_where():
@@ -191,7 +208,11 @@ func _check_observed() -> bool:
 		global_position + Vector3.UP * 0.3]
 	var cctv: CctvApp = player.cctv
 	var on_cameras: bool = player.phone.screen != null and player.phone.screen.is_in_cameras()
-	var cam: Camera3D = player.camera
+	# Whatever Juan is actually looking through: his eyes, or the gap under a
+	# door while he peeks (his head camera is not what he sees then).
+	var cam: Camera3D = player.get_viewport().get_camera_3d()
+	if cam == null:
+		cam = player.camera
 	for p: Vector3 in points:
 		if cctv != null and cctv.is_watching(p):
 			return true
@@ -233,7 +254,7 @@ func _handle_door(delta: float) -> bool:
 		return false
 	_door_timer += delta
 	ground_idle(delta)
-	if _door.can_aswang_open():
+	if _door.can_robot_open():
 		if _door_timer >= _door.get_handle_delay():
 			_door.set_open(true)
 			_door = null
@@ -254,23 +275,37 @@ func _footsteps(delta: float) -> void:
 	if _step_timer > 0.0:
 		return
 	_step_timer = STEP_INTERVAL
+	# Stop-motion: it does not walk, it changes pose once per footfall. Seen
+	# far off in the dark it jerks from one stride to the next.
+	_left_leads = not _left_leads
+	_set_pose("stride")
 	SfxSynth.play_at(self, SfxSynth.metal_step(), global_position + Vector3.UP * 0.05, -9.0, randf_range(1.15, 1.35), 22.0)
 
 
 # --------------------------------------------------------------------- poses
 
-## Caught: stop dead in a new pose, with a faint servo click if Juan is near.
+## Caught: stop dead in a pose that fits what it was doing, staring straight
+## at Juan, with a faint servo click if he is near.
+##   within arm's reach      -> lunging at him
+##   hunting or checking     -> frozen mid-run, reaching or pointing
+##   wandering               -> one of the booth's display poses
 func _freeze() -> void:
 	velocity = Vector3.ZERO
-	var poses: Array[String] = ["reach", "point", "arms_out", "one_up", "lowered", "reach"]
-	_set_pose(poses[randi() % poses.size()])
+	var pose: String
+	if get_player_distance() < LUNGE_RANGE:
+		pose = "lunge"
+	elif state == State.HUNT or state == State.INVESTIGATE:
+		pose = ["stride_reach", "stride_point", "stride_reach", "stride"].pick_random()
+	else:
+		pose = ["point", "arms_out", "one_up", "lowered", "reach", "stride"].pick_random()
+	_set_pose(pose, true)
 	if get_player_distance() < FREEZE_CLICK_RANGE:
 		SfxSynth.play_at(self, SfxSynth.latch_click(), get_eye_position(), -16.0, randf_range(0.6, 0.8), 12.0)
 
 
-## Arm and head directions per pose, in the robot's own frame: -Z is forward,
-## +X its left, +Y up.
-func _set_pose(pose: String) -> void:
+## Limb directions per pose, in the robot's own frame: -Z is forward, +X its
+## left, +Y up. With `look_at_juan` the head turns to stare at him.
+func _set_pose(pose: String, look_at_juan: bool = false) -> void:
 	var sk: Skeleton3D = _get_skeleton()
 	if sk == null:
 		return
@@ -278,7 +313,10 @@ func _set_pose(pose: String) -> void:
 	var right_arm := Vector3(-0.12, -1.0, -0.12)
 	var left_fore := left_arm
 	var right_fore := right_arm
-	var head_tilt: float = randf_range(-0.35, 0.35)
+	var head_roll: float = randf_range(-0.35, 0.35)
+	var head_nod: float = randf_range(-0.15, 0.2)
+	var lean: float = 0.0
+	var striding: bool = false
 	match pose:
 		"reach":
 			left_arm = Vector3(0.15, -0.05, -1.0)
@@ -302,12 +340,91 @@ func _set_pose(pose: String) -> void:
 			right_arm = Vector3(-0.05, -1.0, -0.05)
 			left_fore = Vector3(0.0, -1.0, -0.2)
 			right_fore = Vector3(0.0, -1.0, -0.2)
-			head_tilt = 0.0
+			head_roll = 0.0
+			head_nod = 0.6
+		"stride":
+			# A runner's arms: the one opposite the leading leg swings forward.
+			striding = true
+			lean = 0.16
+			var fwd_arm := Vector3(0.0, -0.75, -0.65)
+			var back_arm := Vector3(0.0, -0.85, 0.5)
+			var fwd_fore := Vector3(0.0, -0.1, -1.0)
+			var back_fore := Vector3(0.0, -1.0, 0.1)
+			left_arm = (back_arm if _left_leads else fwd_arm) + Vector3(0.12, 0.0, 0.0)
+			right_arm = (fwd_arm if _left_leads else back_arm) + Vector3(-0.12, 0.0, 0.0)
+			left_fore = back_fore if _left_leads else fwd_fore
+			right_fore = fwd_fore if _left_leads else back_fore
+		"stride_reach":
+			striding = true
+			lean = 0.2
+			left_arm = Vector3(0.18, -0.1, -1.0)
+			right_arm = Vector3(-0.18, -0.25, -1.0)
+			left_fore = Vector3(0.05, 0.1, -1.0)
+			right_fore = Vector3(-0.05, -0.05, -1.0)
+		"stride_point":
+			striding = true
+			lean = 0.12
+			right_arm = Vector3(-0.1, 0.1, -1.0)
+			right_fore = right_arm
+			left_arm = Vector3(0.2, -0.9, 0.35)
+			left_fore = Vector3(0.1, -1.0, 0.0)
+		"lunge":
+			# Both hands out for his throat, weight thrown forward.
+			striding = true
+			lean = 0.34
+			left_arm = Vector3(0.22, 0.12, -1.0)
+			right_arm = Vector3(-0.22, 0.12, -1.0)
+			left_fore = Vector3(-0.12, 0.2, -1.0)
+			right_fore = Vector3(0.12, 0.2, -1.0)
+			head_roll = randf_range(0.2, 0.45) * (1.0 if randf() < 0.5 else -1.0)
+	# Spine first: the arms and head are aimed in body space on top of it.
+	_tilt_bone(sk, "Spine_", 0.0, lean, 0.0)
 	_aim_bone(sk, "LeftArm_", left_arm)
 	_aim_bone(sk, "RightArm_", right_arm)
 	_aim_bone(sk, "LeftForeArm_", left_fore)
 	_aim_bone(sk, "RightForeArm_", right_fore)
-	_turn_head(sk, head_tilt, 0.6 if pose == "slump" else randf_range(-0.15, 0.2))
+	_pose_legs(sk, striding)
+	var head_yaw: float = 0.0
+	if look_at_juan and player != null:
+		var to_juan: Vector3 = global_basis.inverse() * (player.get_head_position() - (global_position + Vector3.UP * 1.6))
+		head_yaw = clampf(atan2(-to_juan.x, -to_juan.z), -1.3, 1.3)
+		head_nod = clampf(-atan2(to_juan.y, Vector2(to_juan.x, to_juan.z).length()), -0.6, 0.7) - lean
+	_tilt_bone(sk, "Head_", head_roll, head_nod, head_yaw)
+
+
+## Legs: straight, or split in a stride with the leading knee bent. The body
+## is then lowered until the lower foot is back on the floor.
+func _pose_legs(sk: Skeleton3D, striding: bool) -> void:
+	if _foot_rest_y == INF:
+		_model_rest_y = model.position.y
+		_foot_rest_y = _lowest_foot(sk)
+	var lead: String = "Left" if _left_leads else "Right"
+	var trail: String = "Right" if _left_leads else "Left"
+	var side: float = 1.0 if _left_leads else -1.0
+	if striding:
+		_aim_bone(sk, lead + "UpLeg_", Vector3(0.06 * side, -1.0, -0.62))
+		_aim_bone(sk, lead + "Leg_", Vector3(0.0, -1.0, 0.18))
+		_aim_bone(sk, trail + "UpLeg_", Vector3(-0.06 * side, -1.0, 0.38))
+		_aim_bone(sk, trail + "Leg_", Vector3(0.0, -0.85, 0.6))
+	else:
+		for prefix: String in ["LeftUpLeg_", "LeftLeg_", "RightUpLeg_", "RightLeg_"]:
+			var i: int = _bone(sk, prefix)
+			if i >= 0:
+				sk.reset_bone_pose(i)
+		sk.force_update_all_bone_transforms()
+	model.position.y = _model_rest_y - (_lowest_foot(sk) - _foot_rest_y)
+
+
+## Height of the lowest foot or toe bone, in the robot's own frame, as if the
+## model sat at its resting height.
+func _lowest_foot(sk: Skeleton3D) -> float:
+	var lowest: float = INF
+	var to_body: Transform3D = global_transform.affine_inverse() * sk.global_transform
+	for i in sk.get_bone_count():
+		var bone_name: String = sk.get_bone_name(i)
+		if bone_name.contains("Foot_") or bone_name.contains("ToeBase_"):
+			lowest = minf(lowest, (to_body * sk.get_bone_global_pose(i).origin).y)
+	return lowest - (model.position.y - _model_rest_y)
 
 
 func _get_skeleton() -> Skeleton3D:
@@ -341,15 +458,18 @@ func _aim_bone(sk: Skeleton3D, prefix: String, body_dir: Vector3) -> void:
 	sk.force_update_all_bone_transforms()
 
 
-## Tilts the head sideways (`roll`) and forward (`nod`), radians.
-func _turn_head(sk: Skeleton3D, roll: float, nod: float) -> void:
-	var i: int = _bone(sk, "Head_")
+## Turns bone `prefix` from its rest pose, in the robot's own frame: `roll`
+## tips it sideways, `nod` forward, `yaw` to its left. Radians.
+func _tilt_bone(sk: Skeleton3D, prefix: String, roll: float, nod: float, yaw: float) -> void:
+	var i: int = _bone(sk, prefix)
 	if i < 0:
 		return
 	var rest: Quaternion = sk.get_bone_rest(i).basis.get_rotation_quaternion()
 	var parent_basis: Basis = sk.get_bone_global_pose(sk.get_bone_parent(i)).basis.orthonormalized()
-	var to_skel: Basis = sk.global_basis.inverse() * global_basis
+	var to_skel: Basis = sk.global_basis.orthonormalized().inverse() * global_basis.orthonormalized()
 	var forward: Vector3 = (parent_basis.inverse() * (to_skel * Vector3.FORWARD)).normalized()
 	var side: Vector3 = (parent_basis.inverse() * (to_skel * Vector3.RIGHT)).normalized()
-	var q := Quaternion(forward, roll) * Quaternion(side, -nod)
+	var up: Vector3 = (parent_basis.inverse() * (to_skel * Vector3.UP)).normalized()
+	var q := Quaternion(up, yaw) * Quaternion(forward, roll) * Quaternion(side, -nod)
 	sk.set_bone_pose_rotation(i, q * rest)
+	sk.force_update_all_bone_transforms()

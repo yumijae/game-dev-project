@@ -453,6 +453,18 @@ func _on_attack_landed(_fatal: bool) -> void:
 	pass
 
 
+## Where to wait out the pause after a hit: a reachable spot `distance`
+## metres further from Juan than it is now. Without this a robot wandered
+## straight back and stood over him until its next strike came off cooldown.
+func retreat_point(distance: float = 9.0) -> Vector3:
+	if player == null:
+		return random_nav_point(global_position, distance)
+	var away := Vector3(global_position.x - player.global_position.x, 0.0, global_position.z - player.global_position.z)
+	if away.length() < 0.1:
+		away = Vector3.FORWARD
+	return random_nav_point(global_position + away.normalized() * distance, 3.0)
+
+
 ## A random reachable point on the navmesh within `radius` of `around`.
 func random_nav_point(around: Vector3, radius: float) -> Vector3:
 	var map: RID = get_world_3d().navigation_map

@@ -1,23 +1,23 @@
 extends Node
-## TimeManager (autoload) - the night clock, 11:45 PM to 5:30 AM.
+## TimeManager (autoload) - the night clock, 11:45 PM to 6:00 AM.
 ##
 ## 11:45 PM - 11:59 PM is the quiet setup window. At 12:00 AM `midnight_started`
-## wakes the three Aswang, and their aggression escalates on every hour after
-## that until rescue arrives (5:30 AM, or 3:30 AM once the rooftop SOS is sent).
+## reboots the first robot, and they get faster on every hour after that until
+## rescue arrives (6:00 AM, or 3:30 AM once the rooftop SOS is sent).
 
 const START_HOUR: int = 23
 const START_MINUTE: int = 45
 ## Elapsed in-game minutes since 11:45 PM for each milestone.
 const MIDNIGHT_ELAPSED: int = 15
 const SOS_RESCUE_ELAPSED: int = 225
-const DAWN_ELAPSED: int = 345
+const DAWN_ELAPSED: int = 375
 ## Rescue can never arrive sooner than this many game minutes after the SOS.
 const SOS_MINIMUM_WAIT: int = 20
 const MAX_AGGRESSION: int = 6
 
 ## Real seconds per in-game minute before midnight (15 minutes = 2 real minutes).
 @export var pre_midnight_seconds_per_minute: float = 8.0
-## Real seconds per in-game minute after midnight (5.5 hours = 22 real minutes).
+## Real seconds per in-game minute after midnight (6 hours = 24 real minutes).
 @export var night_seconds_per_minute: float = 4.0
 
 var is_running: bool = false

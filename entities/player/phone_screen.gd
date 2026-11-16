@@ -17,8 +17,10 @@ extends Control
 ## no internet, enough for the Robot Expo app to follow the firmware update on
 ## the server. When WARDEN's circuit dies (breaker or UPS empty) Wi-Fi goes too.
 ##
-## Controls while the phone is up: mouse wheel = select / scroll / switch camera,
-## left click = open, right click = back (at home: put the phone away).
+## Controls while the phone is up: mouse wheel = select / scroll, left click =
+## open, right click = back (at home: put the phone away).
+## In Cameras nothing scrolls: A/D (or left click) steps through the cameras
+## of one floor, W/S changes floor, and V switches the whole app on and off from anywhere.
 
 enum Page { HOME, CAMERAS, MESSAGES, THREAD, NOTES, CLOCK, DIALER }
 
@@ -189,15 +191,12 @@ func buzz() -> void:
 
 ## Mouse wheel.
 func scroll(direction: int) -> void:
-	if page != Page.CLOCK and page != Page.NOTES and page != Page.DIALER:
+	if page == Page.HOME or page == Page.MESSAGES or page == Page.THREAD:
 		SfxSynth.play_ui(self, SfxSynth.click(), -26.0, 1.8)
 	match page:
 		Page.HOME:
 			selected = posmod(selected + direction, APPS.size())
 			_refresh_icons()
-		Page.CAMERAS:
-			if _cctv != null:
-				_cctv.step(direction)
 		Page.MESSAGES:
 			_thread_sel = posmod(_thread_sel + direction, _threads.size())
 			_refresh_thread_list()
@@ -205,9 +204,27 @@ func scroll(direction: int) -> void:
 			_thread_scroll.scroll_vertical += direction * 48
 
 
+## Cameras: the next (+1) or previous (-1) camera.
+func camera_step(direction: int) -> void:
+	if page != Page.CAMERAS or _cctv == null or not _cctv.is_open:
+		return
+	SfxSynth.play_ui(self, SfxSynth.click(), -24.0, 1.6)
+	_cctv.step(direction)
+
+
+## Cameras: the first camera one floor up (+1) or down (-1).
+func camera_floor(direction: int) -> void:
+	if page != Page.CAMERAS or _cctv == null or not _cctv.is_open:
+		return
+	SfxSynth.play_ui(self, SfxSynth.click(), -24.0, 1.2)
+	_cctv.step_floor(direction)
+
+
 ## Left click.
 func confirm() -> void:
 	match page:
+		Page.CAMERAS:
+			camera_step(1)
 		Page.HOME:
 			SfxSynth.play_ui(self, SfxSynth.click(), -20.0, 1.3)
 			var icon: AppIcon = _icons[selected]
@@ -288,6 +305,11 @@ func _tip(text: String) -> void:
 
 
 func _notify(app: StringName, title: String, body: String) -> void:
+	# In the pocket only the newest notification is kept for the next time the
+	# phone comes up - not a queue of stale banners covering the screen.
+	if not _shown:
+		_banner_queue.clear()
+		_banner_time = 0.0
 	if _banner_time > 0.6:
 		_banner_queue.append([app, title, body])
 		return
@@ -369,7 +391,8 @@ func _layout(delta: float) -> void:
 	var hs: Vector2 = _hints.get_combined_minimum_size()
 	_hints.size = hs
 	if landscape:
-		_hints.position = Vector2(_rig.position.x + (_rig.size.x - hs.x) * 0.5, _rig.position.y + _rig.size.y + 12.0)
+		# Above the handset: below it they sat on top of the backpack slots.
+		_hints.position = Vector2(_rig.position.x + (_rig.size.x - hs.x) * 0.5, _rig.position.y - hs.y - 12.0)
 	else:
 		_hints.position = Vector2(_rig.position.x + _rig.size.x - hs.x, _rig.position.y - hs.y - 10.0)
 	_hints.modulate.a = ease(_slide, 2.0)
@@ -381,7 +404,7 @@ func _hint_items() -> Array:
 		Page.HOME:
 			return [["WHEEL", "Select"], ["LMB", "Open"], ["RMB", "Put away"]]
 		Page.CAMERAS:
-			return [["WHEEL", "Switch camera"], ["RMB", "Back"], ["V", "Close"]]
+			return [["A / D", "Camera on this floor"], ["W / S", "Change floor"], ["V", "Close"]]
 		Page.MESSAGES:
 			return [["WHEEL", "Select"], ["LMB", "Open"], ["RMB", "Back"]]
 		Page.THREAD:
@@ -422,9 +445,12 @@ func _update_status() -> void:
 	_status_icons.service = "SOS" if on_roof else ""
 	_status_icons.wifi = _has_wifi() and not on_roof
 	_status_icons.queue_redraw()
-	for limit: float in [20.0, 10.0]:
+	# Lowest threshold first: a phone left in the pocket from 25 % to 8 %
+	# reports "10 %" once instead of two stale warnings in a row.
+	for limit: float in [10.0, 20.0]:
 		if _last_battery >= 0.0 and _last_battery > limit and battery <= limit:
 			_notify(&"battery", "Low Battery", "%d%% of battery remaining." % int(limit))
+			break
 	_last_battery = battery
 
 
@@ -445,7 +471,7 @@ func _update_banner(delta: float) -> void:
 
 func _update_home() -> void:
 	_big_clock.text = _clock_text.get_slice(" ", 0)
-	_date.text = "Friday, November 14"
+	_date.text = _date_text()
 	var objective: String = _objectives.back() if not _objectives.is_empty() else "Get out of the building."
 	# Pre-wrapped and capped at three lines; Notes has the whole text.
 	_widget_text.text = _clamp_lines(objective, font(600), 13, SW - 56.0, 3)
@@ -479,12 +505,13 @@ func _update_cameras() -> void:
 	_cam_rec.modulate.a = 1.0 if fmod(_time, 1.2) < 0.75 else 0.15
 	var count: int = _cctv.feed_count()
 	_cam_id.text = "REC   CAM %02d" % (_cctv.feed_index() + 1)
-	_cam_time.text = "11/14   %s" % _clock_text
+	_cam_time.text = "%s   %s" % ["11/15" if _is_past_midnight() else "11/14", _clock_text]
 	_cam_floor.text = Campus.floor_name(_cctv.feed_floor())
 	# The floor already has its own chip; drop the "1F - " prefix.
 	var where: String = _cctv.feed_name()
 	_cam_where.text = where.get_slice(" - ", 1) if where.contains(" - ") else where
-	_cam_pager.text = "‹   %02d / %02d   ›" % [_cctv.feed_index() + 1, count]
+	# Counted within the floor, since A/D never leave it.
+	_cam_pager.text = "‹   %d / %d   ›" % [_cctv.feed_floor_position() + 1, _cctv.feed_floor_count()]
 	_cam_lost.visible = _cctv.is_offline
 	_cam_rec.visible = not _cctv.is_offline
 	if _cctv.is_offline:
@@ -496,7 +523,16 @@ func _update_clock() -> void:
 	_clock_face.minute = TimeManager.get_minute()
 	_clock_face.queue_redraw()
 	_clock_digital.text = _clock_text
-	_clock_date.text = "Friday, November 14"
+	_clock_date.text = _date_text()
+
+
+## The night starts on Friday the 14th and runs past midnight.
+func _is_past_midnight() -> bool:
+	return TimeManager.elapsed_minutes >= TimeManager.MIDNIGHT_ELAPSED
+
+
+func _date_text() -> String:
+	return "Saturday, November 15" if _is_past_midnight() else "Friday, November 14"
 
 
 func _update_call(delta: float) -> void:
@@ -568,8 +604,10 @@ func _on_update_complete() -> void:
 	(t["msgs"] as Array).append({"out": false, "time": "12:00 AM",
 		"text": "Update complete. Firmware v2.4 is installed. Robots are rebooting one at a time. After-hours patrol: ON."})
 	t["unread"] = int(t["unread"]) + 1
-	_threads.erase(t)
-	_threads.push_front(t)
+	_reorder_threads(func() -> void:
+		_threads.erase(t)
+		_threads.push_front(t))
+	_message_arrived(t)
 	_notify(&"robot", "Robot Expo", "Update complete. Rebooting robots one at a time. After-hours patrol: ON.")
 	SfxSynth.play_ui(self, SfxSynth.phone_buzz(), -10.0)
 	if not _shown:
@@ -589,11 +627,14 @@ func _on_robot_online(robot_name: String) -> void:
 	var t: Dictionary = _thread(&"robot_expo")
 	(t["msgs"] as Array).append({"out": false, "time": _clock_text, "text": "%s rebooted. Status: ONLINE." % robot_name})
 	t["unread"] = int(t["unread"]) + 1
+	_message_arrived(t)
 	_notify(&"robot", "Robot Expo", "%s rebooted. Status: ONLINE." % robot_name)
 	SfxSynth.play_ui(self, SfxSynth.phone_buzz(), -12.0)
 	if not _shown:
 		EventBus.ui_notification.emit("Your phone buzzes: %s is back online." % robot_name, 3.5)
 	_refresh_icons()
+	if page == Page.MESSAGES:
+		_refresh_thread_list()
 
 
 ## The server died: the app loses it, and the Wi-Fi drops.
@@ -614,13 +655,13 @@ func _on_sos_progress(seconds: float, required: float) -> void:
 
 
 func _on_sos_sent() -> void:
-	_threads.push_front({
+	_reorder_threads(func() -> void: _threads.push_front({
 		"name": "Emergency SOS", "color": RED, "unread": 1,
 		"msgs": [
 			{"out": true, "text": "SOS. I'm trapped inside STI College Kalibo. The gate is locked. Please send help.", "time": _clock_text},
 			{"out": false, "text": "Emergency services: Your location was received. Help is on the way. ETA %s. Stay somewhere safe." % TimeManager.get_rescue_time_text(), "time": _clock_text},
 		],
-	})
+	}))
 	_notify(&"messages", "Emergency SOS", "Help is on the way. ETA %s." % TimeManager.get_rescue_time_text())
 	_refresh_icons()
 	if page == Page.MESSAGES:
@@ -708,6 +749,23 @@ func _refresh_thread_list() -> void:
 			var dot := Panel.new()
 			dot.add_theme_stylebox_override(&"panel", box(BLUE, 5.0))
 			_place(row, dot, Vector2(192, 34), Vector2(10, 10))
+
+
+## Changes the order of the conversation list without moving the selection
+## off the conversation it was on.
+func _reorder_threads(change: Callable) -> void:
+	var held: Dictionary = _threads[_thread_sel] if _thread_sel < _threads.size() else {}
+	change.call()
+	var index: int = _threads.find(held)
+	if index >= 0:
+		_thread_sel = index
+
+
+## A message landed in `thread`. If that conversation is the one on screen it
+## is read at once: redraw it instead of leaving a stale view and a badge.
+func _message_arrived(thread: Dictionary) -> void:
+	if _shown and page == Page.THREAD and _thread_sel < _threads.size() and is_same(_threads[_thread_sel], thread):
+		_open_thread(_thread_sel)
 
 
 func _open_thread(index: int) -> void:

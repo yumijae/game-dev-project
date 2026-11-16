@@ -33,7 +33,8 @@ func _ready() -> void:
 	process_priority = 1000
 	_viewport = SubViewport.new()
 	_viewport.name = "Reflection"
-	_viewport.size = Vector2i(maxi(int(size.x * pixels_per_metre), 16), maxi(int(size.y * pixels_per_metre), 16))
+	_fit_resolution()
+	GameSettings.changed.connect(_fit_resolution)
 	_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	_viewport.msaa_3d = Viewport.MSAA_DISABLED
 	_viewport.positional_shadow_atlas_size = 2048
@@ -63,6 +64,15 @@ func _ready() -> void:
 	_notifier = VisibleOnScreenNotifier3D.new()
 	_notifier.aabb = AABB(Vector3(-size.x * 0.5, -size.y * 0.5, -0.02), Vector3(size.x, size.y, 0.06))
 	add_child(_notifier)
+
+
+## Reflection resolution follows the quality preset: a mirror is a second
+## full render of the room, the single most expensive thing in a restroom.
+func _fit_resolution() -> void:
+	var density: float = pixels_per_metre * float(GameSettings.preset_value("mirror"))
+	var wanted := Vector2i(maxi(int(size.x * density), 16), maxi(int(size.y * density), 16))
+	if _viewport.size != wanted:
+		_viewport.size = wanted
 
 
 ## Thin steel channel round the glass.

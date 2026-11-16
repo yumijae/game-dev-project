@@ -1,24 +1,19 @@
 extends Node
-## EventBus (autoload) - global signal bus for "Huling Kampana".
+## EventBus (autoload) - global signal bus for "Expo Night".
 ## Systems never hold references to each other; they talk through these signals.
 
 # ----------------------------------------------------------------------- time
 signal time_advanced(hour: int, minute: int, formatted: String, progress: float)
-## 12:00 AM - the three Aswang wake up.
+## 12:00 AM - the rogue update finishes and the first robot reboots.
 signal midnight_started()
 signal hour_struck(hour: int, aggression_level: int)
 signal aggression_escalated(level: int)
 signal rescue_time_changed(hour: int, minute: int)
-## 5:30 AM, or 3:30 AM once the rooftop SOS went out.
+## 6:00 AM, or 3:30 AM once the rooftop SOS went out.
 signal rescue_arrived()
 
 # ---------------------------------------------------------------------- noise
 signal noise_emitted(origin: Vector3, radius: float, noise_type: StringName, source: Node)
-
-# ---------------------------------------------------------------------- scent
-signal scent_level_changed(level: float)
-signal scent_breadcrumb_dropped(crumb: Node3D)
-signal scent_masked(duration: float)
 
 # --------------------------------------------------------------- player stats
 signal stamina_changed(value: float)
@@ -42,21 +37,11 @@ signal inventory_changed()
 signal item_picked_up(item_id: StringName)
 signal item_used(item_id: StringName)
 signal item_crafted(item_id: StringName)
-signal lana_boiling_changed(is_boiling: bool)
 
 # ---------------------------------------------------------------------- world
 signal door_state_changed(door: Node3D)
 signal door_breached(door: Node3D)
-signal salt_barrier_triggered(barrier: Node3D, aswang: Node3D)
 signal glass_shattered(glass: Node3D, point: Vector3)
-
-# --------------------------------------------------------------------- aswang
-signal aswang_state_changed(aswang_id: StringName, state: StringName)
-signal aswang_alerted(aswang_id: StringName, position: Vector3)
-signal aswang_stunned(aswang_id: StringName, duration: float)
-signal tiktik_berserk(position: Vector3)
-signal balbal_form_changed(form: int)
-signal balbal_mimic_line(door: Node3D, line: String)
 
 # ------------------------------------------------------------------------- ui
 ## `actions` is an Array of {"id": StringName, "label": String}.

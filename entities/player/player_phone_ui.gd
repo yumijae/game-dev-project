@@ -5,7 +5,7 @@ extends Node3D
 ##
 ## The LED is the only light strong enough to carry: shining it through an
 ## exterior jalousie window or a corridor viewing pane reports a light leak,
-## and the Aswang come to look.
+## and the robots come to look.
 
 const LED_RANGE: float = 18.0
 ## Higher than a bare cone needs: the cookie dims everything but the core.
