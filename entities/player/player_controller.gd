@@ -418,7 +418,12 @@ func _update_footsteps(delta: float) -> void:
 			step_db = -27.0
 		elif is_sprinting:
 			step_db = -8.0
-		SfxSynth.play_at(self, SfxSynth.shoe_step(), global_position + Vector3.UP * 0.05, step_db,
+		var step_sound: AudioStream = SfxSynth.shoe_step()
+		if stats.footwear == PlayerStats.Footwear.SOCKS:
+			step_sound = SfxSynth.sock_step()
+		elif stats.footwear == PlayerStats.Footwear.BAREFOOT:
+			step_sound = SfxSynth.bare_step()
+		SfxSynth.play_at(self, step_sound, global_position + Vector3.UP * 0.05, step_db,
 			randf_range(0.92, 1.08) * (1.08 if is_sprinting else 1.0), 24.0)
 		NoiseManager.emit_footstep(global_position, radius * stats.get_noise_multiplier(), noise_type, self)
 

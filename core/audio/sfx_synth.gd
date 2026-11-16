@@ -9,7 +9,7 @@ const MIX_RATE: int = 22050
 const SAMPLE_DIR: String = "res://audio/sfx/"
 ## Recorded cue -> number of takes (files are <cue>_01.ogg, <cue>_02.ogg ...).
 const SAMPLES: Dictionary = {
-	&"shoe_step": 8, &"glass_shatter": 6, &"glass_crunch": 3, &"thud": 5, &"knock": 2,
+	&"glass_shatter": 6, &"glass_crunch": 3, &"thud": 5, &"knock": 2,
 	&"latch_click": 4, &"clatter": 4, &"keys_jingle": 3, &"door_open": 2, &"door_close": 5,
 	&"thunder": 1, &"spray": 1, &"rain": 1,
 }
@@ -276,6 +276,56 @@ static func footstep() -> AudioStream:
 	return shoe_step()
 
 
+## Takes of each soft step, so a corridor of them never repeats exactly.
+const SOFT_STEP_TAKES: int = 4
+
+
+## A step in socks: a muffled heel thump and a faint brush of cloth on tile.
+## No squeak, no click.
+static func sock_step() -> AudioStream:
+	return _cached(StringName("sock_step_%d" % (randi() % SOFT_STEP_TAKES)), func() -> PackedFloat32Array:
+		var length: float = 0.24
+		var samples: PackedFloat32Array = _silence(length)
+		var low: float = 0.0
+		var band: float = 0.0
+		var body: float = randf_range(62.0, 78.0)
+		var brush_at: float = randf_range(0.025, 0.04)
+		for i: int in samples.size():
+			var t: float = float(i) / MIX_RATE
+			low = lerpf(low, randf_range(-1.0, 1.0), 0.04)
+			band = lerpf(band, randf_range(-1.0, 1.0), 0.25)
+			var thump: float = (sin(TAU * body * t) * 0.5 + low * 3.0) * exp(-t * 30.0)
+			var brush: float = 0.0
+			if t > brush_at:
+				var w: float = t - brush_at
+				brush = band * 0.18 * minf(w * 60.0, 1.0) * exp(-w * 22.0)
+			samples[i] = (thump + brush) * minf(t * 900.0, 1.0) * 0.8
+		return samples)
+
+
+## A bare foot on tile: a soft heel pat, then the ball of the foot a beat
+## later. Skin, not rubber: short and dull.
+static func bare_step() -> AudioStream:
+	return _cached(StringName("bare_step_%d" % (randi() % SOFT_STEP_TAKES)), func() -> PackedFloat32Array:
+		var length: float = 0.22
+		var samples: PackedFloat32Array = _silence(length)
+		var low: float = 0.0
+		var pat: float = 0.0
+		var body: float = randf_range(80.0, 95.0)
+		var ball_at: float = randf_range(0.045, 0.065)
+		for i: int in samples.size():
+			var t: float = float(i) / MIX_RATE
+			low = lerpf(low, randf_range(-1.0, 1.0), 0.06)
+			pat = lerpf(pat, randf_range(-1.0, 1.0), 0.18)
+			var heel: float = (sin(TAU * body * t) * 0.45 + low * 2.2 + pat * 0.35) * exp(-t * 45.0)
+			var ball: float = 0.0
+			if t > ball_at:
+				var w: float = t - ball_at
+				ball = (low * 1.4 + pat * 0.3) * minf(w * 1500.0, 1.0) * exp(-w * 55.0) * 0.6
+			samples[i] = (heel + ball) * minf(t * 1500.0, 1.0) * 0.8
+		return samples)
+
+
 ## A sharp involuntary breath.
 static func gasp() -> AudioStreamWAV:
 	return _cached(&"gasp", func() -> PackedFloat32Array:
@@ -372,28 +422,29 @@ static func drone() -> AudioStreamWAV:
 		return samples)
 
 
-## One of four rubber-soled steps on terrazzo: a soft heel strike, then the
-## toe a beat later, with a touch of grit. Variants stop the machine-gun effect.
+## A school shoe on tile, synthesised: one of four heel-and-toe steps.
 static func shoe_step(variant: int = -1) -> AudioStream:
-	var recorded: AudioStream = _sample(&"shoe_step")
-	if recorded != null:
-		return recorded
-	var v: int = (randi() if variant < 0 else variant) % 4
+	var v: int = (randi() if variant < 0 else variant) % SOFT_STEP_TAKES
 	return _cached(StringName("shoe_%d" % v), func() -> PackedFloat32Array:
-		var samples: PackedFloat32Array = _silence(0.2)
-		var band: float = 0.0
-		var previous: float = 0.0
-		var toe_at: float = randf_range(0.045, 0.07)
-		var tone: float = randf_range(85.0, 120.0)
+		# A school shoe on tile: a firm heel "tock" (rubber heel, hard floor),
+		# then a lighter toe tap. Low and short, so it never squeaks.
+		var samples: PackedFloat32Array = _silence(0.22)
+		var low: float = 0.0
+		var mid: float = 0.0
+		var body: float = randf_range(95.0, 120.0)
+		var knock_hz: float = randf_range(330.0, 420.0)
+		var toe_at: float = randf_range(0.05, 0.07)
 		for i: int in samples.size():
 			var t: float = float(i) / MIX_RATE
-			var white: float = randf_range(-1.0, 1.0)
-			band = lerpf(band, white - previous * 0.6, 0.5)
-			previous = white
-			var heel: float = exp(-t * 60.0)
-			var toe: float = exp(-maxf(t - toe_at, 0.0) * 75.0) * 0.55 if t >= toe_at else 0.0
-			var body: float = sin(TAU * tone * t) * exp(-t * 45.0) * 0.6
-			samples[i] = (band * 0.7 * (heel + toe) + body) * minf(t * 3000.0, 1.0)
+			low = lerpf(low, randf_range(-1.0, 1.0), 0.07)
+			mid = lerpf(mid, randf_range(-1.0, 1.0), 0.3)
+			var heel: float = (sin(TAU * body * t) * 0.5 + sin(TAU * knock_hz * t) * 0.25 * exp(-t * 30.0)
+				+ low * 1.8 + mid * 0.35) * exp(-t * 40.0)
+			var toe: float = 0.0
+			if t > toe_at:
+				var w: float = t - toe_at
+				toe = (sin(TAU * body * 1.3 * w) * 0.3 + low * 1.0 + mid * 0.3) * minf(w * 2000.0, 1.0) * exp(-w * 60.0) * 0.55
+			samples[i] = (heel + toe) * minf(t * 2500.0, 1.0) * 0.8
 		return samples)
 
 

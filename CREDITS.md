@@ -83,11 +83,7 @@ mono and levelled for the game (res://audio/sfx).
   https://opengameart.org/content/100-cc0-metal-and-wood-sfx
   https://opengameart.org/content/75-cc0-breaking-falling-hit-sfx
   Used as: doors, latches, knocks, slams, metal clatter, keys, breaking glass,
-  thunder, the extinguisher burst and two of the footsteps.
-
-- **"Footsteps"** by GboxMikeFozzy
-  https://opengameart.org/content/footsteps-0
-  Used as: Juan's footsteps.
+  thunder and the extinguisher burst.
 
 - **"Rain (loopable)"** by Ylmir
   https://opengameart.org/content/rain-loopable
