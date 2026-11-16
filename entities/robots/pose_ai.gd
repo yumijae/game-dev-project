@@ -54,6 +54,19 @@ var _model_rest_y: float = 0.0
 var _hunch_timer: float = 30.0
 
 
+## Heading for a SearchPlanner waypoint (not a random wander point).
+var _searching: bool = false
+## Longest it spends getting to one search waypoint.
+const SEARCH_LEG_TIME: float = 24.0
+
+
+## A search waypoint it could not reach in time: skip it.
+func _give_up_waypoint() -> void:
+	if _searching:
+		_searching = false
+		search.arrive()
+
+
 func _init() -> void:
 	display_name = "POSE"
 	hostile_id = &"pose"
@@ -112,6 +125,7 @@ func _on_attack_landed(fatal: bool) -> void:
 	if not fatal:
 		# Backs off and waits for the next chance.
 		_retreat_timer = RETREAT_TIME
+		_searching = false
 		state = State.ROAM
 		_target = retreat_point()
 		_roam_timer = ROAM_REPICK
@@ -150,6 +164,7 @@ func _tick(delta: float) -> void:
 	if stuck_count >= 3:
 		# This way keeps failing: go somewhere else for now.
 		stuck_count = 0
+		_give_up_waypoint()
 		state = State.ROAM
 		_target = random_nav_point(global_position, ROAM_RADIUS)
 		_roam_timer = ROAM_REPICK
@@ -175,17 +190,24 @@ func _think(delta: float) -> void:
 	if state == State.ROAM:
 		_roam_timer -= delta
 		if _roam_timer <= 0.0:
+			_give_up_waypoint()
 			_pick_roam_target()
 
 
 func _on_arrived() -> void:
 	match state:
 		State.HUNT, State.INVESTIGATE:
-			# Lost him: search around the spot.
+			# Lost him: search the rooms he most likely went to.
 			state = State.ROAM
-			_target = random_nav_point(global_position, 5.0)
-			_roam_timer = ROAM_REPICK * 0.5
+			if begin_search():
+				_pick_roam_target()
+			else:
+				_target = random_nav_point(global_position, 5.0)
+				_roam_timer = ROAM_REPICK * 0.5
 		State.ROAM:
+			if _searching:
+				_searching = false
+				search_arrived()
 			_pick_roam_target()
 
 
@@ -193,14 +215,21 @@ func _on_arrived() -> void:
 ## finds its way back to him in the end - just not straight away.
 func _pick_roam_target() -> void:
 	_roam_timer = ROAM_REPICK
+	_searching = false
 	if player == null:
 		_target = random_nav_point(global_position, ROAM_RADIUS)
 		return
 	if _retreat_timer > 0.0:
 		_target = retreat_point()
 		return
-	# Heads for where it last saw or heard him; with no lead, a vague hunch
+	# Searches the rooms round its last lead; with no lead, a vague hunch
 	# every so often, otherwise it just wanders.
+	var waypoint: Vector3 = next_search_waypoint()
+	if waypoint != Vector3.INF:
+		_target = waypoint
+		_searching = true
+		_roam_timer = SEARCH_LEG_TIME
+		return
 	if knows_where():
 		_target = random_nav_point(point_along_route(last_known, 10.0), 3.0)
 	elif _hunch_timer <= 0.0:
@@ -219,6 +248,7 @@ func _on_found_hidden(at: Vector3) -> void:
 func _on_heard(origin: Vector3, _noise_type: StringName, audibility: float) -> void:
 	if state == State.HUNT or state == State.OFF or audibility < 0.2:
 		return
+	_searching = false
 	state = State.INVESTIGATE
 	_target = origin
 	remember(origin)
@@ -288,6 +318,7 @@ func _handle_door(delta: float) -> bool:
 	if _door_timer >= GIVE_UP_DOOR_TIME:
 		turn_from_door(_door)
 		_door = null
+		_give_up_waypoint()
 		state = State.ROAM
 		_target = random_nav_point(global_position, ROAM_RADIUS)
 		_roam_timer = ROAM_REPICK

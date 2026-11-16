@@ -81,6 +81,8 @@ var _talk_timer: float = 8.0
 var _lose_timer: float = 0.0
 var _door_timer: float = 0.0
 var _look_timer: float = 0.0
+## Heading for a SearchPlanner waypoint (not a random patrol point).
+var _searching: bool = false
 var _retreat_timer: float = 0.0
 var _screen_mat: StandardMaterial3D = null
 var _face: Label3D = null
@@ -241,7 +243,18 @@ func _tick(delta: float) -> void:
 				_talk_timer = randf_range(16.0, 26.0)
 				_say(LINES_PATROL[randi() % LINES_PATROL.size()])
 			_patrol_timer -= delta
-			if _drive(_target, PATROL_SPEED, delta) or _patrol_timer <= 0.0:
+			var reached: bool = _drive(_target, PATROL_SPEED, delta)
+			if _searching and reached:
+				# A room or hiding spot on its list: stop and look it over.
+				_searching = false
+				search_arrived()
+				state = State.INVESTIGATE
+				_set_face("question")
+				_look_timer = LOOK_TIME
+			elif reached or _patrol_timer <= 0.0:
+				if _searching:
+					_searching = false
+					search.arrive()
 				_pick_patrol_target()
 		State.INVESTIGATE:
 			if _look_timer > 0.0:
@@ -452,12 +465,35 @@ func _avoid_door(door: InteractableDoor) -> void:
 
 func _pick_patrol_target() -> void:
 	_patrol_timer = 22.0
+	_searching = false
+	# Lost a visitor recently: check the rooms on this floor he could be in.
+	var waypoint: Vector3 = next_search_waypoint(_can_search)
+	if waypoint != Vector3.INF:
+		_target = waypoint
+		_searching = true
+		_set_face("question")
+		return
 	for _attempt in 8:
 		var p: Vector3 = random_nav_point(global_position, 12.0)
 		if _route_stays(p):
 			_target = p
 			return
 	_target = global_position
+
+
+## A search waypoint it can actually get to: on its floor, and (no hands) in
+## the corridor or a room with a door already open.
+func _can_search(p: Vector3) -> bool:
+	if not _route_stays(p):
+		return false
+	var room_id: int = Campus.room_id_at(p + Vector3.UP * 0.3)
+	if room_id <= 0:
+		return true
+	for node: Node in get_tree().get_nodes_in_group(&"doors"):
+		var door := node as InteractableDoor
+		if door != null and door.is_passable() 				and Campus.room_id_at(door.get_side_position(1.0, 0.75) + Vector3.UP * 0.3) == room_id:
+			return true
+	return false
 
 
 ## `p` pulled onto this robot's floor (the nearest navmesh point at its height).

@@ -81,6 +81,9 @@ func kind() -> StringName:
 
 
 func _ready() -> void:
+	# A new night: no room has been searched yet. (All robots spawn with the
+	# level, so this only ever runs at the start of a night.)
+	SearchPlanner.reset_memory()
 	# Layer 2 so Juan's interaction ray can find it.
 	collision_layer = LAYER_ROBOT | 2
 	collision_mask = MOVE_MASK
@@ -136,6 +139,7 @@ func activate(_at: Vector3 = Vector3.INF) -> void:
 
 func deactivate() -> void:
 	var was_active: bool = is_active
+	search.clear()
 	super()
 	velocity = Vector3.ZERO
 	is_docked = false
@@ -242,6 +246,55 @@ func _tick(_delta: float) -> void:
 ## A noise it could actually hear. `audibility` is 0..1.
 func _on_heard(_origin: Vector3, _noise_type: StringName, _audibility: float) -> void:
 	pass
+
+
+# -------------------------------------------------------------------- search
+# Lost him: work through the rooms he most likely went to (SearchPlanner)
+# instead of wandering round random points near the last lead.
+
+## Chance that stopping at the very hiding spot Juan is in gives him away
+## (a shadow through the vents, breathing). Rises as he camps.
+const HIDING_CHECK_CHANCE: float = 0.3
+## His heading only steers the guess while the sighting is this fresh.
+const HEADING_FRESH_MS: int = 12000
+
+var search: SearchPlanner = SearchPlanner.new()
+## Juan's velocity the last time it saw him.
+var last_seen_heading: Vector3 = Vector3.ZERO
+
+
+## Starts (or keeps) a search from its last lead. False when it has no lead
+## or nothing reachable to search. `reachable` filters waypoints.
+func begin_search(reachable: Callable = Callable()) -> bool:
+	if not knows_where():
+		return false
+	if search.covers(last_known):
+		return true
+	var heading: Vector3 = last_seen_heading
+	if Time.get_ticks_msec() - _last_saw_ms > HEADING_FRESH_MS:
+		heading = Vector3.ZERO
+	search.build(self, last_known, heading, reachable)
+	return search.is_active()
+
+
+## Where to go next in the search, or Vector3.INF when there is none. A
+## fresh lead starts a new search; an old one keeps going after the lead
+## itself has faded from memory.
+func next_search_waypoint(reachable: Callable = Callable()) -> Vector3:
+	if knows_where() and not search.covers(last_known):
+		begin_search(reachable)
+	return search.next_point()
+
+
+## Call on reaching a search waypoint. At a hiding spot, Juan inside it may
+## give himself away.
+func search_arrived() -> void:
+	var spot: HidingSpot = search.current_spot()
+	search.arrive()
+	if spot == null or player == null or spot.occupant != player or player.is_hide_exposed:
+		return
+	if randf() < HIDING_CHECK_CHANCE + 0.4 * player.get_camp_level():
+		player.expose_hiding(self)
 
 
 # ------------------------------------------------------------------- hivemind
@@ -396,6 +449,8 @@ func can_see_player(fov: float = 0.0) -> bool:
 	var seen: bool = _sight_test(fov)
 	if seen:
 		_last_saw_ms = Time.get_ticks_msec()
+		last_seen_heading = player.velocity
+		search.clear()
 	return seen
 
 

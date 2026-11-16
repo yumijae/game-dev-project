@@ -77,6 +77,10 @@ var _lights: Array[OmniLight3D] = []
 var _flicker_timer: float = 0.0
 
 
+## Heading for a SearchPlanner waypoint (not a random search hop).
+var _searching: bool = false
+
+
 func _init() -> void:
 	display_name = "PROTOTYPE"
 	hostile_id = &"prototype"
@@ -202,6 +206,7 @@ func _tick(delta: float) -> void:
 		state = State.HUNT
 		remember(player.global_position)
 		_target = last_known
+		_searching = false
 	match state:
 		State.LISTEN:
 			ground_idle(delta)
@@ -213,7 +218,13 @@ func _tick(delta: float) -> void:
 				# (It used to take a fresh bearing on him every few seconds,
 				# which was live tracking in all but name: silence never lost it.)
 				state = State.STALK
-				if knows_where():
+				_searching = false
+				var waypoint: Vector3 = next_search_waypoint()
+				if waypoint != Vector3.INF:
+					# Works through the rooms he most likely went to.
+					_target = waypoint
+					_searching = true
+				elif knows_where():
 					_target = random_nav_point(point_along_route(last_known, SEARCH_HOP), 3.0)
 				elif _hunch_timer <= 0.0:
 					_hunch_timer = PROTOTYPE_HUNCH_INTERVAL
@@ -234,12 +245,18 @@ func _move(speed: float, delta: float) -> void:
 		return
 	if stuck_count >= 3:
 		stuck_count = 0
+		if _searching:
+			_searching = false
+			search.arrive()
 		_stop_and_listen()
 		return
 	var arrived: bool = nav_move_to(_target, speed * get_speed_factor(), delta)
 	face_direction(_desired_direction, delta, 6.0 if state == State.STALK else 10.0)
 	_gait(Vector2(velocity.x, velocity.z).length(), delta)
 	if arrived:
+		if _searching:
+			_searching = false
+			search_arrived()
 		_stop_and_listen()
 
 
@@ -253,6 +270,7 @@ func _on_found_hidden(at: Vector3) -> void:
 		return
 	state = State.HUNT
 	_target = at
+	_searching = false
 
 
 func _on_heard(origin: Vector3, _noise_type: StringName, audibility: float) -> void:
@@ -260,6 +278,7 @@ func _on_heard(origin: Vector3, _noise_type: StringName, audibility: float) -> v
 		return
 	_quiet_timer = 0.0
 	_target = origin
+	_searching = false
 	# Its head whips round to the sound before the body follows.
 	var to_sound: Vector3 = global_basis.inverse() * (origin - global_position)
 	_snap_yaw = clampf(atan2(-to_sound.x, -to_sound.z), -1.3, 1.3)

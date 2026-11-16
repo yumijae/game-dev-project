@@ -57,6 +57,12 @@ var _tipped: float = 0.0
 var _pause_timer: float = 0.0
 
 
+## Heading for a SearchPlanner waypoint (not a random wander point).
+var _searching: bool = false
+## Longest it spends getting to one search waypoint.
+const SEARCH_LEG_TIME: float = 20.0
+
+
 func _init() -> void:
 	display_name = "SCUTTLE"
 	hostile_id = &"scuttle"
@@ -99,6 +105,7 @@ func _on_attack_landed(fatal: bool) -> void:
 	if not fatal:
 		_retreat_timer = RETREAT_TIME
 		state = State.ROAM
+		_searching = false
 		_target = retreat_point()
 		_roam_timer = RETREAT_TIME
 
@@ -115,6 +122,7 @@ func _tick(delta: float) -> void:
 		State.ROAM:
 			_roam_timer -= delta
 			if _roam_timer <= 0.0:
+				_give_up_waypoint()
 				_pick_roam_target()
 		State.INVESTIGATE:
 			speed = INVESTIGATE_SPEED
@@ -132,6 +140,7 @@ func _tick(delta: float) -> void:
 		return
 	if stuck_count >= 3:
 		stuck_count = 0
+		_give_up_waypoint()
 		_pick_roam_target()
 	var arrived: bool = nav_move_to(_target, speed * get_speed_factor(), delta)
 	face_direction(_desired_direction, delta, 14.0)
@@ -141,10 +150,17 @@ func _tick(delta: float) -> void:
 	if arrived:
 		_pause_timer = randf_range(PAUSE_TIME.x, PAUSE_TIME.y)
 		if state == State.INVESTIGATE:
+			# Nothing here: search the rooms he most likely went to.
 			state = State.ROAM
-			_target = random_nav_point(global_position, 4.0)
-			_roam_timer = 6.0
+			if begin_search():
+				_pick_roam_target()
+			else:
+				_target = random_nav_point(global_position, 4.0)
+				_roam_timer = 6.0
 		elif state == State.ROAM:
+			if _searching:
+				_searching = false
+				search_arrived()
 			_pick_roam_target()
 
 
@@ -178,13 +194,21 @@ func _on_heard(origin: Vector3, _noise_type: StringName, audibility: float) -> v
 		return
 	state = State.INVESTIGATE
 	_target = origin
+	_searching = false
 	_pause_timer = 0.0
 
 
 func _pick_roam_target() -> void:
 	_roam_timer = randf_range(6.0, 12.0)
+	_searching = false
 	if _retreat_timer > 0.0:
 		_target = retreat_point()
+		return
+	var waypoint: Vector3 = next_search_waypoint()
+	if waypoint != Vector3.INF:
+		_target = waypoint
+		_searching = true
+		_roam_timer = SEARCH_LEG_TIME
 		return
 	var around: Vector3 = global_position
 	if knows_where():
@@ -193,6 +217,13 @@ func _pick_roam_target() -> void:
 		# A vague hunch now and then, so it never just sits in one place.
 		around = point_along_route(hunch(12.0), 10.0)
 	_target = random_nav_point(around, 8.0)
+
+
+## A search waypoint it could not reach in time: skip it.
+func _give_up_waypoint() -> void:
+	if _searching:
+		_searching = false
+		search.arrive()
 
 
 # --------------------------------------------------------------------- doors
