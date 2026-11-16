@@ -56,8 +56,12 @@ func interact(player: PlayerController, _action_id: StringName) -> void:
 	var leftover: int = player.inventory.add_item(item_id, count)
 	if leftover >= count:
 		var reason: String = "Both hands are full." if ItemDB.is_hands_only(item_id) else "No room. Drop something first."
-		EventBus.ui_notification.emit(reason, 2.0)
+		if player.inventory.last_refusal == &"weight":
+			reason = "Too heavy - you are already carrying %.1f of %d kg." % [player.inventory.get_load(), int(InventoryComponent.MAX_LOAD)]
+		EventBus.ui_notification.emit(reason, 2.5)
 		return
+	if leftover > 0 and player.inventory.last_refusal == &"weight":
+		EventBus.ui_notification.emit("You can only carry %d of them." % (count - leftover), 2.5)
 	EventBus.item_picked_up.emit(item_id)
 	EventBus.ui_notification.emit("Took %s" % ItemDB.get_item_name(item_id), 1.6)
 	if leftover <= 0:

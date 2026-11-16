@@ -7,7 +7,7 @@ const SHATTER_NOISE: float = 18.0
 const GRAVITY: float = 9.8
 const MAX_FLIGHT_TIME: float = 5.0
 ## World, doors, glass and robot bodies.
-const HIT_MASK: int = 1 | 8 | 16 | 32
+const HIT_MASK: int = 1 | 8 | 16 | 32 | 128
 
 var velocity: Vector3 = Vector3.ZERO
 

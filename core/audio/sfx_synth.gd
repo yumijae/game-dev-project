@@ -11,7 +11,7 @@ const SAMPLE_DIR: String = "res://audio/sfx/"
 const SAMPLES: Dictionary = {
 	&"shoe_step": 8, &"glass_shatter": 6, &"glass_crunch": 3, &"thud": 5, &"knock": 2,
 	&"latch_click": 4, &"clatter": 4, &"keys_jingle": 3, &"door_open": 2, &"door_close": 5,
-	&"thunder": 1, &"spray": 1, &"rain": 1, &"paper": 4, &"chair_creak": 2,
+	&"thunder": 1, &"spray": 1, &"rain": 1,
 }
 const LOOPED_SAMPLES: Array[StringName] = [&"rain"]
 
@@ -53,18 +53,6 @@ static func zap() -> AudioStream:
 			var env: float = minf(t * 300.0, 1.0) * minf((length - t) * 12.0, 1.0)
 			samples[i] = (buzz + crackle) * env * 0.8
 		return samples)
-
-
-## Card or tape rustling while it is put up or torn down.
-static func paper() -> AudioStream:
-	var recorded: AudioStream = _sample(&"paper")
-	return recorded if recorded != null else scrape()
-
-
-## A plastic chair creaking as it is jammed under a handle.
-static func chair_creak() -> AudioStream:
-	var recorded: AudioStream = _sample(&"chair_creak")
-	return recorded if recorded != null else metal_creak()
 
 
 ## A door handle turning and the leaf coming off its latch.

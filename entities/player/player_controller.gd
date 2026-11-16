@@ -8,13 +8,15 @@ extends CharacterBody3D
 ##
 ## Controls:  WASD move - Shift sprint - Ctrl crouch - E interact - Q next action
 ##   F flashlight - Tab raise phone - V cameras on/off (A/D camera, W/S floor)
-##   T footwear - C crafting - 1-6 backpack to hand
+##   T footwear - 1-6 backpack to hand
 ##   LMB use held item - RMB cancel - R switch hand - X drop - G stifle a gasp
 ##   Esc pause (PauseMenu)
 
 const STAND_HEIGHT: float = 1.75
 const CROUCH_HEIGHT: float = 1.0
-const INTERACT_RAY_MASK: int = 1 | 2 | 8 | 16
+## 128: open door leaves (InteractableDoor.LAYER_OPEN_LEAF), so an open door
+## can still be looked at and closed.
+const INTERACT_RAY_MASK: int = 1 | 2 | 8 | 16 | 128
 ## Fire extinguisher: one burst reaches this far in this half-angle cone.
 const EXTINGUISHER_RANGE: float = 4.5
 const EXTINGUISHER_CONE: float = 28.0
@@ -50,7 +52,6 @@ const AMBIENT_LIGHT_FACTOR: float = 0.7
 
 var stats: PlayerStats = null
 var inventory: InventoryComponent = null
-var crafting: CraftingSystem = null
 var phone: PlayerPhoneUI = null
 ## The CCTV app (V): school security camera feeds on the phone.
 var cctv: CctvApp = null
@@ -59,7 +60,6 @@ var is_crouching: bool = false
 var is_sprinting: bool = false
 var is_peeking: bool = false
 var is_dead: bool = false
-var is_crafting_open: bool = false
 ## True whenever Juan is inside a HidingSpot.
 var is_hidden: bool:
 	get:
@@ -82,6 +82,21 @@ var _was_moving: bool = false
 
 # Active channel (timed interaction); empty when idle.
 var _channel: Dictionary = {}
+
+## Anti-camping: how long Juan has stayed around one spot (seconds). It only
+## counts once the robots are loose. See get_camp_level().
+var camp_time: float = 0.0
+var _camp_anchor: Vector3 = Vector3.INF
+var _camp_warned: int = 0
+## Within this many metres (same floor) of the anchor he counts as staying put.
+const CAMP_RADIUS: float = 12.0
+## Grace before it starts to count, and how long after that until the robots
+## home in on him.
+const CAMP_GRACE: float = 45.0
+const CAMP_RAMP: float = 60.0
+## Moving on keeps this share of the clock (no resetting by shuffling between
+## two lockers).
+const CAMP_CARRY_OVER: float = 0.4
 ## 0..1: how far into "working" posture the view is (eases in and out).
 var _work: float = 0.0
 var _work_phase: float = 0.0
@@ -95,6 +110,8 @@ const WORK_ROLL: float = 0.012
 
 func _ready() -> void:
 	add_to_group(&"player")
+	# Juan still walks into an open door leaf; robots do not (they would snag).
+	collision_mask |= InteractableDoor.LAYER_OPEN_LEAF
 	_ensure_input_actions()
 	_build_components()
 	ray.target_position = Vector3(0.0, 0.0, -interact_distance)
@@ -120,10 +137,6 @@ func _build_components() -> void:
 	inventory = InventoryComponent.new()
 	inventory.name = "InventoryComponent"
 	add_child(inventory)
-	crafting = CraftingSystem.new()
-	crafting.name = "CraftingSystem"
-	add_child(crafting)
-	crafting.setup(self, inventory)
 	phone = PlayerPhoneUI.new()
 	phone.name = "PlayerPhoneUI"
 	phone.setup(stats)
@@ -150,9 +163,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		return
 	if is_dead:
-		return
-	if is_crafting_open:
-		_handle_crafting_input(event)
 		return
 	if phone.is_phone_out and phone.screen != null:
 		# Phone up: the wheel and mouse buttons drive the phone.
@@ -215,8 +225,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		phone.toggle_phone_out()
 	elif event.is_action_pressed(&"cycle_footwear"):
 		_change_footwear()
-	elif event.is_action_pressed(&"toggle_crafting"):
-		_set_crafting_open(true)
 	elif event.is_action_pressed(&"use_item"):
 		use_active_item()
 	elif event.is_action_pressed(&"switch_hand"):
@@ -233,25 +241,6 @@ func _unhandled_input(event: InputEvent) -> void:
 ## Eyes on the CCTV: Juan stands still and cannot look around.
 func _is_watching_cameras() -> bool:
 	return phone != null and phone.screen != null and phone.screen.is_in_cameras()
-
-
-func _handle_crafting_input(event: InputEvent) -> void:
-	if event.is_action_pressed(&"toggle_crafting") or event.is_action_pressed(&"cancel_action"):
-		_set_crafting_open(false)
-		return
-	for i: int in CraftingSystem.RECIPES.size():
-		if event.is_action_pressed("slot_%d" % (i + 1)):
-			var recipe: Dictionary = CraftingSystem.RECIPES[i]
-			_set_crafting_open(false)
-			crafting.craft(recipe["id"])
-			return
-
-
-func _set_crafting_open(open: bool) -> void:
-	if open and (is_channeling() or is_peeking):
-		return
-	is_crafting_open = open
-	EventBus.ui_crafting_toggled.emit(open)
 
 
 func _on_interact_pressed() -> void:
@@ -288,7 +277,7 @@ func _physics_process(delta: float) -> void:
 		return
 	if is_channeling():
 		_update_channel(delta)
-	var frozen: bool = is_channeling() or is_hidden or is_peeking or is_crafting_open or _is_watching_cameras()
+	var frozen: bool = is_channeling() or is_hidden or is_peeking or _is_watching_cameras()
 	if frozen:
 		is_sprinting = false
 		# Hard labour (dragging furniture) costs stamina; it must not also rest him.
@@ -306,10 +295,42 @@ func _physics_process(delta: float) -> void:
 	else:
 		_move(delta)
 	_update_work_motion(delta)
+	_update_camping(delta)
 	_focus_timer += delta
 	if _focus_timer >= FOCUS_REFRESH_INTERVAL:
 		_focus_timer = 0.0
 		_refresh_focus(false)
+
+
+## 0 while Juan keeps moving; rises to 1 when he has stayed around one spot
+## for CAMP_GRACE + CAMP_RAMP seconds. The robots sharpen their guesses as it
+## rises and, at 1, keep getting a fix on him (RobotBase._camp_pressure).
+func get_camp_level() -> float:
+	return clampf((camp_time - CAMP_GRACE) / CAMP_RAMP, 0.0, 1.0)
+
+
+func _update_camping(delta: float) -> void:
+	if is_dead or not TimeManager.is_night_active():
+		camp_time = 0.0
+		_camp_anchor = Vector3.INF
+		return
+	var here: Vector3 = global_position
+	var moved_on: bool = _camp_anchor == Vector3.INF \
+		or Campus.floor_from_y(here.y + 0.3) != Campus.floor_from_y(_camp_anchor.y + 0.3) \
+		or Vector2(here.x - _camp_anchor.x, here.z - _camp_anchor.z).length() > CAMP_RADIUS
+	if moved_on:
+		_camp_anchor = here
+		camp_time *= CAMP_CARRY_OVER
+		_camp_warned = 0
+		return
+	camp_time += delta
+	var level: float = get_camp_level()
+	if level >= 0.5 and _camp_warned < 1:
+		_camp_warned = 1
+		EventBus.ui_subtitle.emit("I've been here too long. They'll find me.", 4.0, &"Juan")
+	elif level >= 1.0 and _camp_warned < 2:
+		_camp_warned = 2
+		EventBus.ui_subtitle.emit("...Something is coming this way. I have to move.", 4.0, &"Juan")
 
 
 ## While a timed action runs, the view leans in towards the work and heaves
@@ -342,13 +363,14 @@ func _move(delta: float) -> void:
 	is_sprinting = false
 	if is_crouching:
 		speed = crouch_speed
-	elif moving and Input.is_action_pressed(&"sprint") and stats.can_sprint():
+	elif moving and Input.is_action_pressed(&"sprint") and stats.can_sprint() \
+			and inventory.get_load() <= InventoryComponent.SPRINT_LOAD:
 		is_sprinting = stats.drain_stamina(SPRINT_DRAIN * delta)
 		if is_sprinting:
 			speed = sprint_speed
 	if not is_sprinting:
 		stats.recover_stamina((STAMINA_RECOVERY_MOVING if moving else STAMINA_RECOVERY_RESTING) * delta)
-	speed *= stats.get_speed_multiplier()
+	speed *= stats.get_speed_multiplier() * inventory.get_speed_multiplier()
 	var direction: Vector3 = (transform.basis * Vector3(input.x, 0.0, input.y)).normalized()
 	var acceleration: float = (14.0 if is_on_floor() else 3.0) * speed
 	velocity.x = move_toward(velocity.x, direction.x * speed, acceleration * delta)
@@ -427,7 +449,7 @@ func is_lit() -> bool:
 
 func _refresh_focus(force: bool) -> void:
 	var target: Node = null
-	if not (is_hidden or is_peeking or is_channeling() or is_crafting_open or is_dead):
+	if not (is_hidden or is_peeking or is_channeling() or is_dead):
 		target = _find_interactable()
 	var actions: Array[Dictionary] = []
 	if target != null:
@@ -717,11 +739,6 @@ func use_active_item() -> void:
 			_spray_extinguisher()
 		ItemDB.TASER:
 			_fire_taser()
-		ItemDB.TRIPWIRE:
-			inventory.remove_item(item_id, 1)
-			EventBus.item_used.emit(item_id)
-			TripwireAlarm.place(get_tree().current_scene, _get_drop_position(), -global_transform.basis.x)
-			EventBus.ui_notification.emit("Tripwire set. If anything walks through it, you'll hear it.", 2.5)
 		ItemDB.POWERBANK:
 			start_channel("Charging the phone", 5.0, _finish_powerbank, {"can_fumble": false})
 		_:
@@ -1040,7 +1057,7 @@ static func _ensure_input_actions() -> void:
 		&"sprint": [KEY_SHIFT], &"crouch": [KEY_CTRL],
 		&"interact": [KEY_E], &"cycle_action": [KEY_Q],
 		&"toggle_flashlight": [KEY_F], &"toggle_phone": [KEY_TAB], &"toggle_cctv": [KEY_V],
-		&"cycle_footwear": [KEY_T], &"toggle_crafting": [KEY_C],
+		&"cycle_footwear": [KEY_T],
 		&"switch_hand": [KEY_R], &"drop_item": [KEY_X], &"stifle_gasp": [KEY_G],
 		&"slot_1": [KEY_1], &"slot_2": [KEY_2], &"slot_3": [KEY_3],
 		&"slot_4": [KEY_4], &"slot_5": [KEY_5], &"slot_6": [KEY_6],

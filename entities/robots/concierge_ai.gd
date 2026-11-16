@@ -57,10 +57,14 @@ const LINE_HELP := "I cannot reach the handle. Requesting assistance."
 const LINE_REBOOT_GO := "Unit %s is not responding. On my way."
 const LINE_REBOOT := "Rebooting unit %s. Please stand by."
 const LINE_REBOOT_DONE := "Reboot complete. Thank you for your patience."
+const LINE_REBOOT_REMOTE := "Unable to reach unit %s. Attempting remote reboot."
 ## Seconds at a downed robot's side before it is back up.
 const REBOOT_TIME: float = 6.0
-## A downed robot it could not get to is ignored for this long.
-const REBOOT_RETRY: float = 45.0
+## A remote reboot over the school network (it cannot get to the robot: a
+## door it cannot open, or another floor) is much slower, and it must hold
+## still for all of it.
+const REMOTE_REBOOT_TIME: float = 20.0
+const REMOTE_BEEP_INTERVAL: float = 2.0
 ## How long it waits at a door once another robot is on its way to open it.
 const HELP_WAIT: float = 30.0
 const LINE_HIT := "Thank you for your cooperation."
@@ -100,10 +104,11 @@ var _helper: RobotBase = null
 ## Where _drive() was last asked to go (its heading is re-aimed on change).
 var _drive_goal: Vector3 = Vector3.INF
 ## The downed robot it is going to reboot, how long it has worked on it, and
-## robots it could not reach (until when to leave them alone).
+## whether it is doing it remotely (it cannot drive there).
 var _patient: RobotBase = null
 var _reboot_timer: float = 0.0
-var _unreachable: Dictionary = {}
+var _remote: bool = false
+var _beep_timer: float = 0.0
 
 
 func _init() -> void:
@@ -222,8 +227,12 @@ func _tick(delta: float) -> void:
 			_patient = down
 			_reboot_timer = 0.0
 			state = State.REBOOT
-			_set_face("question")
-			_say(LINE_REBOOT_GO % down.display_name)
+			_remote = not _can_drive_to(down)
+			if _remote:
+				_start_remote_reboot()
+			else:
+				_set_face("question")
+				_say(LINE_REBOOT_GO % down.display_name)
 	match state:
 		State.REBOOT:
 			_tend_patient(delta)
@@ -254,19 +263,32 @@ func _tick(delta: float) -> void:
 	_motor.pitch_scale = lerpf(2.0, 2.8, moving)
 
 
-## A knocked-out robot on its own floor that it can drive to, or null.
+## A knocked-out robot to bring back (anywhere: one it cannot drive to it
+## reboots remotely), preferring one it can reach.
 func _robot_to_reboot() -> RobotBase:
-	var now: float = Time.get_ticks_msec() / 1000.0
+	var fallback: RobotBase = null
 	for node: Node in get_tree().get_nodes_in_group(&"downed_robots"):
 		var robot := node as RobotBase
-		if robot == null or not robot.is_down or float(_unreachable.get(robot, 0.0)) > now:
+		if robot == null or not robot.is_down:
 			continue
-		if Campus.floor_from_y(robot.global_position.y + 0.5) != home_floor:
-			continue
-		if not _route_stays(robot.global_position):
-			continue
-		return robot
-	return null
+		if _can_drive_to(robot):
+			return robot
+		if fallback == null:
+			fallback = robot
+	return fallback
+
+
+## On its own floor and a walkable route that never takes the stairs.
+func _can_drive_to(robot: RobotBase) -> bool:
+	return Campus.floor_from_y(robot.global_position.y + 0.5) == home_floor and _route_stays(robot.global_position)
+
+
+func _start_remote_reboot() -> void:
+	_remote = true
+	_reboot_timer = 0.0
+	_beep_timer = 0.0
+	_set_face("signal")
+	_say(LINE_REBOOT_REMOTE % _patient.display_name)
 
 
 ## Drives to the downed robot, plugs in and reboots it.
@@ -275,15 +297,24 @@ func _tend_patient(delta: float) -> void:
 		_patient = null
 		_look_around_then_patrol()
 		return
+	if _remote:
+		# Holds still and pushes the reboot over the network.
+		ground_idle(delta)
+		_reboot_timer += delta
+		_beep_timer -= delta
+		if _beep_timer <= 0.0:
+			_beep_timer = REMOTE_BEEP_INTERVAL
+			SfxSynth.play_at(self, SfxSynth.ups_beep(), get_eye_position(), -16.0, 1.5, 12.0)
+		if _reboot_timer >= REMOTE_REBOOT_TIME:
+			_finish_reboot()
+		return
 	var at: Vector3 = _patient.global_position
 	var flat := Vector3(at.x - global_position.x, 0.0, at.z - global_position.z)
 	if flat.length() > 1.3:
 		_reboot_timer = 0.0
 		if _drive(at, INVESTIGATE_SPEED, delta) and flat.length() > 1.3:
-			# Gave up (a door nobody would open): leave it for a while.
-			_unreachable[_patient] = Time.get_ticks_msec() / 1000.0 + REBOOT_RETRY
-			_patient = null
-			_look_around_then_patrol()
+			# Stuck (a door nobody will open): do it remotely from here.
+			_start_remote_reboot()
 		return
 	ground_idle(delta)
 	face_point(at, delta, 4.0)
@@ -293,11 +324,16 @@ func _tend_patient(delta: float) -> void:
 		SfxSynth.play_at(self, SfxSynth.ups_beep(), get_eye_position(), -12.0, 0.8, 14.0)
 	_reboot_timer += delta
 	if _reboot_timer >= REBOOT_TIME:
-		SfxSynth.play_at(self, SfxSynth.ups_beep(), get_eye_position(), -10.0, 1.2, 14.0)
-		_patient.reboot()
-		_patient = null
-		_say(LINE_REBOOT_DONE)
-		_look_around_then_patrol()
+		_finish_reboot()
+
+
+func _finish_reboot() -> void:
+	SfxSynth.play_at(self, SfxSynth.ups_beep(), get_eye_position(), -10.0, 1.2, 14.0)
+	_patient.reboot()
+	_patient = null
+	_remote = false
+	_say(LINE_REBOOT_DONE)
+	_look_around_then_patrol()
 
 
 func _sense(delta: float) -> void:
@@ -566,6 +602,9 @@ func _set_face(mood: String) -> void:
 		"dazed":
 			col = Color(0.85, 0.85, 0.9)
 			text = "x_x"
+		"signal":
+			col = Color(0.35, 0.6, 1.0)
+			text = "((o))"
 		"off":
 			col = Color(0, 0, 0)
 			text = ""

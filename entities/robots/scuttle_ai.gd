@@ -7,7 +7,7 @@ extends RobotBase
 ##   - Goes anywhere, stairs included.
 ##   - Closed doors don't stop it: it flattens and squeezes through the gap
 ##     underneath - unless something heavy is pushed against the bottom of the
-##     door (HeavyProp gap block), the one thing that keeps it out.
+##     door; nothing keeps it out.
 ##   - Hunts by sound. It only sees Juan within a few metres.
 ##   - Its skittering clicks give it away before it arrives.
 ##   - The model is one rigid piece (legs included), so the whole body is

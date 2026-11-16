@@ -5,7 +5,6 @@ extends RefCounted
 ## Each is a few primitives sized from the item's entry in ItemDB, standing
 ## on the origin.
 
-const CHAIR_SCENE: String = "res://models/polyhaven/plastic_monobloc_chair_01/plastic_monobloc_chair_01.gltf"
 const BOTTLES: Array[StringName] = [ItemDB.GLASS_BOTTLE, ItemDB.WATER, ItemDB.ALCOHOL]
 const CLEAR_BOTTLES: Array[StringName] = [ItemDB.GLASS_BOTTLE, ItemDB.WATER]
 const STEEL: Color = Color(0.5, 0.51, 0.53)
@@ -38,12 +37,6 @@ static func build(item_id: StringName) -> Node3D:
 		_box(root, Vector3(size.x * 0.44, size.z * 0.5, 0.0), Vector3(0.03, size.z * 0.85, size.y * 0.9), black, 0.6)
 		for side: float in [-1.0, 1.0]:
 			_box(root, Vector3(size.x * 0.5 + 0.008, size.z * 0.5, side * 0.011), Vector3(0.016, 0.004, 0.004), STEEL, 0.3, 0.9)
-	elif item_id == ItemDB.TRIPWIRE:
-		var coil := TorusMesh.new()
-		coil.outer_radius = 0.06
-		coil.inner_radius = 0.05
-		_part(root, coil, Vector3(0.0, 0.006, 0.0), ItemDB.get_color(ItemDB.LAN_CABLE), 0.6)
-		_bottle(root, Vector3(0.06, 0.18, 0.06), ItemDB.get_color(ItemDB.GLASS_BOTTLE), true)
 	elif item_id == ItemDB.TABLECLOTH_RAG:
 		for i: int in 3:
 			var fold: MeshInstance3D = _box(root, Vector3(0.0, 0.005 + float(i) * 0.009, 0.0),
@@ -54,26 +47,6 @@ static func build(item_id: StringName) -> Node3D:
 		roll.rotation.z = PI * 0.5
 		var core: MeshInstance3D = _cylinder(root, Vector3(0.0, size.x * 0.5, 0.0), size.x * 0.16, size.y + 0.002, Color(0.55, 0.45, 0.3), 0.9)
 		core.rotation.z = PI * 0.5
-	elif item_id == ItemDB.LAN_CABLE:
-		for i: int in 3:
-			var coil := TorusMesh.new()
-			coil.outer_radius = size.x * 0.5 - float(i) * 0.004
-			coil.inner_radius = coil.outer_radius - 0.011
-			coil.rings = 20
-			coil.ring_segments = 6
-			_part(root, coil, Vector3(float(i) * 0.004, 0.006 + float(i) * 0.011, 0.0), colour, 0.6)
-		_box(root, Vector3(size.x * 0.5, 0.008, 0.02), Vector3(0.022, 0.012, 0.012), Color(0.85, 0.85, 0.8, 0.8), 0.3)
-	elif item_id == ItemDB.BLACKOUT_KIT:
-		for i: int in 3:
-			var sheet: MeshInstance3D = _box(root, Vector3(0.0, 0.002 + float(i) * 0.003, 0.0), Vector3(size.x, 0.002, size.z), colour, 0.9)
-			sheet.rotation.y = float(i) * 0.05
-		var tape := TorusMesh.new()
-		tape.outer_radius = 0.05
-		tape.inner_radius = 0.034
-		tape.rings = 18
-		tape.ring_segments = 4
-		var roll: MeshInstance3D = _part(root, tape, Vector3(0.03, 0.03, 0.05), Color(0.45, 0.34, 0.18), 0.4)
-		roll.scale.y = 2.6
 	elif item_id == ItemDB.REHAS_KEY:
 		var ring := TorusMesh.new()
 		ring.outer_radius = 0.02
@@ -102,9 +75,6 @@ static func build(item_id: StringName) -> Node3D:
 		_box(root, Vector3(0.0, size.y * 0.5, 0.0), size, colour, 0.35)
 		_box(root, Vector3(0.0, size.y + 0.0005, size.z * 0.3), Vector3(size.x * 0.5, 0.001, 0.006), Color(0.2, 0.6, 0.9), 0.3)
 		_box(root, Vector3(0.0, size.y * 0.5, -size.z * 0.5), Vector3(0.013, 0.006, 0.002), STEEL, 0.3, 0.9)
-	elif item_id == ItemDB.CHAIR and ResourceLoader.exists(CHAIR_SCENE):
-		var scene: PackedScene = load(CHAIR_SCENE)
-		root.add_child(scene.instantiate())
 	else:
 		_box(root, Vector3(0.0, size.y * 0.5, 0.0), size, colour, 0.6)
 	return root

@@ -15,26 +15,18 @@ extends Node3D
 
 ## room id -> [[item id, count], ...]
 const GUARANTEED: Dictionary = {
-	2: [[ItemDB.BLACKOUT_KIT, 2], [ItemDB.WATER, 1]],
+	2: [[ItemDB.WATER, 1]],
 	3: [[ItemDB.REHAS_KEY, 1]],
 	4: [[ItemDB.FIRE_EXTINGUISHER, 3], [ItemDB.WATER, 1]],
-	5: [[ItemDB.CROWBAR, 1], [ItemDB.TASER, 1], [ItemDB.ALCOHOL, 1], [ItemDB.GAUZE, 1], [ItemDB.CHAIR, 1]],
-	6: [[ItemDB.BLACKOUT_KIT, 1]],
-	7: [[ItemDB.LAN_CABLE, 2], [ItemDB.LAN_CABLE, 1]],
-	8: [[ItemDB.LAN_CABLE, 2], [ItemDB.CHAIR, 1]],
+	5: [[ItemDB.CROWBAR, 1], [ItemDB.TASER, 1], [ItemDB.ALCOHOL, 1], [ItemDB.GAUZE, 1]],
 	9: [[ItemDB.ALCOHOL, 1]],
 	10: [[ItemDB.GAUZE, 1]],
-	12: [[ItemDB.BOLT_CUTTERS, 1], [ItemDB.TASER, 1], [ItemDB.POWERBANK, 1], [ItemDB.LAN_CABLE, 1]],
-	13: [[ItemDB.LAN_CABLE, 2], [ItemDB.TASER, 1]],
-	15: [[ItemDB.CHAIR, 1], [ItemDB.BLACKOUT_KIT, 1]],
-	17: [[ItemDB.CHAIR, 1]],
-	18: [[ItemDB.FIRE_EXTINGUISHER, 3], [ItemDB.BLACKOUT_KIT, 1], [ItemDB.GAUZE, 1], [ItemDB.WATER, 1]],
+	12: [[ItemDB.BOLT_CUTTERS, 1], [ItemDB.TASER, 1], [ItemDB.POWERBANK, 1]],
+	13: [[ItemDB.TASER, 1]],
+	18: [[ItemDB.FIRE_EXTINGUISHER, 3], [ItemDB.GAUZE, 1], [ItemDB.WATER, 1]],
 	19: [[ItemDB.ALCOHOL, 1]],
-	21: [[ItemDB.CHAIR, 1]],
-	22: [[ItemDB.CHAIR, 1], [ItemDB.BLACKOUT_KIT, 1]],
-	23: [[ItemDB.WATER, 1], [ItemDB.CHAIR, 1]],
+	23: [[ItemDB.WATER, 1]],
 	24: [[ItemDB.FIRE_EXTINGUISHER, 3], [ItemDB.GLASS_BOTTLE, 2], [ItemDB.GLASS_BOTTLE, 1], [ItemDB.WATER, 1]],
-	25: [[ItemDB.CHAIR, 1]],
 	26: [[ItemDB.GLASS_BOTTLE, 2], [ItemDB.GLASS_BOTTLE, 1]],
 	27: [[ItemDB.TABLECLOTH_RAG, 2], [ItemDB.TABLECLOTH_RAG, 1], [ItemDB.GLASS_BOTTLE, 1], [ItemDB.WATER, 1]],
 }
@@ -57,19 +49,15 @@ var _clutter_ready: bool = false
 
 ## room type -> common items a spare marker may receive.
 const FILLER: Dictionary = {
-	"classroom": [ItemDB.WATER, ItemDB.BLACKOUT_KIT, ItemDB.GLASS_BOTTLE],
-	"complab": [ItemDB.LAN_CABLE, ItemDB.WATER],
-	"robolab": [ItemDB.LAN_CABLE, ItemDB.POWERBANK],
+	"classroom": [ItemDB.WATER, ItemDB.GLASS_BOTTLE],
+	"complab": [ItemDB.WATER],
+	"robolab": [ItemDB.POWERBANK],
 	"kitchen": [ItemDB.GLASS_BOTTLE, ItemDB.WATER],
 	"pantry": [ItemDB.GLASS_BOTTLE],
 	"dining": [ItemDB.TABLECLOTH_RAG, ItemDB.WATER, ItemDB.GLASS_BOTTLE],
 	"faculty": [ItemDB.WATER, ItemDB.GAUZE],
 	"staff": [ItemDB.WATER, ItemDB.GLASS_BOTTLE],
 	"restroom": [ItemDB.GAUZE],
-	"admissions": [ItemDB.BLACKOUT_KIT],
-	"cashier": [ItemDB.BLACKOUT_KIT],
-	"mit": [ItemDB.LAN_CABLE],
-	"server": [ItemDB.LAN_CABLE],
 }
 
 

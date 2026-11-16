@@ -14,13 +14,6 @@ const THICKNESS: float = 0.05
 const HANDLE_HEIGHT: float = 0.95
 const HANDLE_INSET: float = 0.085
 const LEVER_LENGTH: float = 0.13
-const CHAIR_SCENE: String = "res://models/polyhaven/plastic_monobloc_chair_01/plastic_monobloc_chair_01.gltf"
-## The wedged chair is drawn a little larger than the pickup so its backrest
-## reaches the lever; nobody measures a chair jammed against a door.
-const WEDGE_CHAIR_SCALE: float = 1.18
-## Monobloc chair (model space): back feet line and top of the backrest.
-const CHAIR_BACK_FOOT: Vector2 = Vector2(0.0, -0.3)      # (y, z)
-const CHAIR_TOP_RAIL: Vector2 = Vector2(0.875, -0.33)    # (y, z)
 
 static var _materials: Dictionary = {}
 
@@ -84,95 +77,6 @@ static func dress(leaf: Node3D, width: float, height: float, gap: float, inward:
 		worn.next_pass = wear
 		slab.material_override = worn
 	return thumb
-
-
-## The plastic chair tipped back on its rear legs, the top of its backrest
-## jammed under the lever on the room side, front legs in the air. The tilt
-## is solved so the feet sit on the floor and the rail meets the lever.
-static func build_wedge(leaf: Node3D, width: float, inward: float) -> Node3D:
-	var holder := Node3D.new()
-	holder.name = "WedgeChair"
-	leaf.add_child(holder)
-	if not ResourceLoader.exists(CHAIR_SCENE):
-		_box(holder, Vector3(width - 0.4, 0.45, inward * 0.3), Vector3(0.45, 0.9, 0.4), _material(&"steel"))
-		return holder
-	var chair: Node3D = (load(CHAIR_SCENE) as PackedScene).instantiate()
-	holder.add_child(chair)
-	var s: float = WEDGE_CHAIR_SCALE
-	var foot := CHAIR_BACK_FOOT * s
-	var top := CHAIR_TOP_RAIL * s
-	# Height the rail must reach: just under the lever's underside.
-	var floor_y: float = -0.01
-	var target_rise: float = (HANDLE_HEIGHT - 0.012) - floor_y
-	var arm := Vector2(top.x - foot.x, top.y - foot.y)          # (dy, dz) foot -> rail
-	var arm_len: float = arm.length()
-	var tilt: float = 0.0
-	if arm_len > target_rise:
-		# Rotating backwards by `tilt` lowers the rail to the target height.
-		tilt = acos(clampf(target_rise / arm_len, -1.0, 1.0)) - atan2(-arm.y, arm.x)
-	# The chair faces into the room, back towards the door.
-	var yaw: float = 0.0 if inward > 0.0 else PI
-	var basis := Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, -tilt) * Basis.from_scale(Vector3.ONE * s)
-	# Place it so the top of the rail touches the door face under the lever.
-	var rail_local := Vector3(0.0, CHAIR_TOP_RAIL.x, CHAIR_TOP_RAIL.y)
-	var rail_at := Vector3(width - 0.4, HANDLE_HEIGHT - 0.012, inward * (THICKNESS * 0.5 + 0.012))
-	chair.transform = Transform3D(basis, rail_at - basis * rail_local)
-	return holder
-
-
-## LAN cable wound round the lever on the room side, ends hanging loose.
-## `wound` (0..1) builds it part way: the coil grows turn by turn from the
-## first tail, and the second tail and its plug only drop once it is done.
-static func build_cable(leaf: Node3D, width: float, inward: float, wound: float = 1.0) -> Node3D:
-	var holder := Node3D.new()
-	holder.name = "CableTie"
-	leaf.add_child(holder)
-	fill_cable(holder, width, inward, wound)
-	return holder
-
-
-## (Re)builds the cable's meshes inside `holder` for a winding progress.
-static func fill_cable(holder: Node3D, width: float, inward: float, wound: float) -> void:
-	for child: Node in holder.get_children():
-		holder.remove_child(child)
-		child.queue_free()
-	var cable: Material = _material(&"cable")
-	var z0: float = inward * (THICKNESS * 0.5 + 0.062)
-	var centre := Vector3(width - HANDLE_INSET - 0.07, HANDLE_HEIGHT - 0.003, z0)
-	var coil: Array[Vector3] = []
-	var turns: int = 4
-	var steps: int = turns * 14
-	var done: int = clampi(int(round(float(steps) * clampf(wound, 0.0, 1.0))), 1, steps)
-	for i: int in done + 1:
-		var a: float = TAU * float(i) / 14.0
-		coil.append(centre + Vector3(-0.025 + 0.05 * float(i) / float(steps), sin(a) * 0.016, cos(a) * 0.016))
-	_mesh(holder, TubeMesh.build(coil, 0.0035, 8), cable)
-	var finished: bool = wound >= 1.0
-	# The two tails: one hanging, one with its RJ45 plug swinging below.
-	# Limp cable: each tail curls out from the coil and droops under its own
-	# weight, swinging slightly away from the door.
-	var plug_at := Vector3.ZERO
-	var tails: Array = [[coil[0], Vector3(-0.05, -0.16, 0.03), -1.0]]
-	if finished:
-		tails.append([coil[-1], Vector3(0.07, -0.24, 0.04), 1.0])
-	else:
-		# The free end is still in Juan's hand: a short stub pulled taut
-		# towards the room.
-		var tip: Vector3 = coil[-1]
-		_mesh(holder, TubeMesh.build([tip, tip + Vector3(0.02, -0.03, inward * 0.09)] as Array[Vector3], 0.0035, 8), cable)
-	for tail: Array in tails:
-		var start: Vector3 = tail[0]
-		var drop: Vector3 = tail[1]
-		var path: Array[Vector3] = []
-		for k: int in 13:
-			var t: float = float(k) / 12.0
-			var sag: float = t * t
-			path.append(start + Vector3(drop.x * sin(t * PI * 0.5) + float(tail[2]) * 0.012 * sin(t * PI * 2.0),
-				drop.y * sag, inward * drop.z * sin(t * PI) ))
-		_mesh(holder, TubeMesh.build(path, 0.0035, 8), cable)
-		plug_at = path[-1] + Vector3(0.0, -0.012, 0.0)
-	if finished:
-		_box(holder, plug_at, Vector3(0.012, 0.022, 0.014), _material(&"plug"))
 
 
 # -------------------------------------------------------------------- helpers

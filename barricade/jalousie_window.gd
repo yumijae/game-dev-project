@@ -14,7 +14,6 @@ enum State { OPEN, CLOSED, TAPED_BLACKOUT, SHATTERED }
 
 const LAYER_INTERACT: int = 2
 const LAYER_GLASS: int = 16
-const TAPE_TIME: float = 4.0
 const CRANK_NOISE: float = 4.0
 const SHATTER_NOISE: float = 18.0
 const SMALL_WINDOW_HEIGHT: float = 1.0
@@ -221,8 +220,6 @@ func get_interactions(_player: PlayerController) -> Array[Dictionary]:
 			actions.append({"id": &"open_right", "label": "Slide the right pane open"})
 		State.OPEN:
 			actions.append({"id": &"close", "label": "Slide the window shut"})
-		State.TAPED_BLACKOUT:
-			actions.append({"id": &"untape", "label": "Tear the black card off"})
 		State.SHATTERED:
 			pass
 	return actions
@@ -240,10 +237,6 @@ func interact(player: PlayerController, action_id: StringName) -> void:
 			_crank(State.OPEN)
 		&"close":
 			_crank(State.CLOSED)
-		&"tape":
-			player.start_channel("Taping black card over the window", TAPE_TIME, _finish_tape.bind(player))
-		&"untape":
-			set_state(State.CLOSED)
 
 
 func set_state(new_state: State) -> void:
@@ -259,13 +252,6 @@ func _crank(new_state: State) -> void:
 	state = new_state
 	_animate_slide()
 	NoiseManager.emit_noise(global_position, CRANK_NOISE, &"jalousie_crank", self)
-
-
-func _finish_tape(player: PlayerController) -> void:
-	if state != State.CLOSED or not player.inventory.remove_item(ItemDB.BLACKOUT_KIT, 1):
-		return
-	set_state(State.TAPED_BLACKOUT)
-	EventBus.ui_notification.emit("Blacked out. No light gets through this window.", 2.5)
 
 
 # ------------------------------------------------------------------ Robot API

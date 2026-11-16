@@ -11,7 +11,7 @@ extends CanvasLayer
 ##   * the reticle is a dot that opens into a ring over something usable
 ##
 ## Still here, as before: clock and objective, the survival stats, hands and
-## backpack, the interaction list, channel progress, subtitles, the crafting
+## backpack, the interaction list, channel progress, subtitles, the
 ## panel, the gasp prompt and the ending screen.
 
 const BONE: Color = Color(0.84, 0.81, 0.74)
@@ -79,8 +79,6 @@ var _notification: Label = null
 var _inventory_bar: HBoxContainer = null
 var _slot_names: Array[Label] = []
 var _slot_rules: Array[ColorRect] = []
-var _crafting_panel: PanelContainer = null
-var _crafting_list: VBoxContainer = null
 var _gasp_label: Label = null
 var _vignette: ColorRect = null
 var _end_panel: ColorRect = null
@@ -119,7 +117,6 @@ func _ready() -> void:
 	EventBus.ui_channel_started.connect(_on_channel_started)
 	EventBus.ui_channel_progress.connect(func(ratio: float) -> void: _channel_bar.value = ratio)
 	EventBus.ui_channel_finished.connect(func(_completed: bool) -> void: _channel_box.visible = false)
-	EventBus.ui_crafting_toggled.connect(_on_crafting_toggled)
 	EventBus.ui_gasp_prompt.connect(_on_gasp_prompt)
 	EventBus.ui_peek_changed.connect(func(_peeking: bool) -> void: _refresh_vignette())
 	EventBus.player_hidden_changed.connect(func(_hidden: bool, _spot: Node3D) -> void: _refresh_vignette())
@@ -137,7 +134,7 @@ func _process(delta: float) -> void:
 	_inventory_time = maxf(_inventory_time - delta, 0.0)
 	_fade_targets[_objective] = 1.0 if _objective_time > 0.0 else IDLE_ALPHA
 	_fade_targets[_location] = 1.0 if _location_time > 0.0 else IDLE_ALPHA
-	_fade_targets[_inventory_bar] = 1.0 if _inventory_time > 0.0 or _crafting_panel.visible else IDLE_ALPHA
+	_fade_targets[_inventory_bar] = 1.0 if _inventory_time > 0.0 else IDLE_ALPHA
 	_fade_targets[_end_panel] = 1.0 if _is_over else 0.0
 	for element: Control in _fade_targets:
 		var target: float = _fade_targets[element]
@@ -304,21 +301,6 @@ func _build() -> void:
 	_gasp_label.text = "G     STIFLE IT"
 	_gasp_label.visible = false
 
-	_crafting_panel = PanelContainer.new()
-	_crafting_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	_crafting_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_crafting_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
-	var paper := StyleBoxFlat.new()
-	paper.bg_color = Color(0.025, 0.022, 0.022, 0.94)
-	paper.border_color = Color(BONE, 0.22)
-	paper.set_border_width_all(1)
-	paper.set_content_margin_all(26.0)
-	_crafting_panel.add_theme_stylebox_override("panel", paper)
-	_crafting_panel.visible = false
-	_root.add_child(_crafting_panel)
-	_crafting_list = VBoxContainer.new()
-	_crafting_list.add_theme_constant_override("separation", 9)
-	_crafting_panel.add_child(_crafting_list)
 
 	_end_panel = ColorRect.new()
 	_end_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -468,6 +450,11 @@ func _refresh_status() -> void:
 		parts.append("Breathing hard")
 	if stats.in_darkness:
 		parts.append("In the dark")
+	var load: float = _player.inventory.get_load()
+	if load >= 1.0:
+		var heavy: bool = load > InventoryComponent.SLOW_LOAD
+		parts.append("Carrying %.1f / %d kg%s" % [load, int(InventoryComponent.MAX_LOAD),
+			"  (too heavy to run)" if load > InventoryComponent.SPRINT_LOAD else ("  (slowed)" if heavy else "")])
 	_status.text = "\n".join(parts)
 	var alarmed: bool = stats.is_bleeding
 	_status.add_theme_color_override("font_color", EMBER if alarmed else ASH)
@@ -492,8 +479,6 @@ func _refresh_inventory() -> void:
 		var active: bool = i == inventory.active_hand
 		_slot_rules[i].color = Color(BLOOD, 1.0) if active else Color(ASH, 0.35)
 		_slot_rules[i].custom_minimum_size.y = 2.0 if active else 1.0
-	if _crafting_panel.visible:
-		_fill_crafting()
 
 
 func _on_prompt_changed(actions: Array, selected: int) -> void:
@@ -536,30 +521,6 @@ func _on_channel_started(label: String, duration: float) -> void:
 	_channel_label.text = "%s  -  %.0f s  -  right click to stop" % [label, duration]
 	_channel_bar.value = 0.0
 	_channel_box.visible = true
-
-
-func _on_crafting_toggled(is_open: bool) -> void:
-	_crafting_panel.visible = is_open
-	if is_open:
-		_fill_crafting()
-
-
-func _fill_crafting() -> void:
-	for child: Node in _crafting_list.get_children():
-		child.queue_free()
-	var title: Label = _label(_crafting_list, 20, BONE, _font_caps)
-	title.text = "Make"
-	_rule(_crafting_list, 46.0, Color(BLOOD, 0.9))
-	for i: int in CraftingSystem.RECIPES.size():
-		var recipe: Dictionary = CraftingSystem.RECIPES[i]
-		var can_make: bool = _player.crafting.can_craft(recipe)
-		var line: Label = _label(_crafting_list, 16, BONE if can_make else Color(ASH, 0.6), _font_body)
-		line.text = "%d     %s" % [i + 1, _player.crafting.describe(recipe)]
-		if not can_make:
-			var lacking: Label = _label(_crafting_list, 13, Color(ASH, 0.6), _font_italic)
-			lacking.text = "         you still need  %s" % ", ".join(_player.crafting.get_missing(recipe))
-	var hint: Label = _label(_crafting_list, 10, ASH, _font_caps)
-	hint.text = "Press its number to make it     C  to close"
 
 
 func _on_gasp_prompt(active: bool, window: float) -> void:

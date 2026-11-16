@@ -170,10 +170,36 @@ func knows_where() -> bool:
 ## A rough idea of where Juan might be, for when it has lost him: his floor
 ## and the general area, off by up to `error` metres. Robots get one of these
 ## every HUNCH_INTERVAL seconds so a night never stalls, without homing in.
+## The longer Juan camps in one spot, the sharper it gets.
 func hunch(error: float = 9.0) -> Vector3:
 	if player == null:
 		return global_position
-	return random_nav_point(player.global_position, error)
+	return random_nav_point(player.global_position, error * lerpf(1.0, 0.2, player.get_camp_level()))
+
+
+## Anti-camping: once Juan has stayed put too long, every CAMP_PING seconds
+## the robots get a fix on him (within a couple of metres), as if they had
+## heard him there; and one that gets close finds him even in a hiding spot.
+const CAMP_PING: float = 10.0
+const CAMP_PING_ERROR: float = 1.5
+const CAMP_FIND_RANGE: float = 4.5
+var _camp_ping_timer: float = 0.0
+
+
+func _camp_pressure(delta: float) -> void:
+	if player == null or player.is_dead or player.get_camp_level() < 1.0:
+		_camp_ping_timer = 0.0
+		return
+	_camp_ping_timer -= delta
+	if _camp_ping_timer <= 0.0:
+		_camp_ping_timer = CAMP_PING
+		var guess: Vector3 = random_nav_point(player.global_position, CAMP_PING_ERROR)
+		remember(guess)
+		_on_heard(guess, &"camping", 0.4)
+	if player.is_hidden and not player.is_hide_exposed \
+			and absf(player.global_position.y - global_position.y) < 2.0 \
+			and Vector2(player.global_position.x - global_position.x, player.global_position.z - global_position.z).length() <= CAMP_FIND_RANGE:
+		player.expose_hiding(self)
 
 
 func _physics_process(delta: float) -> void:
@@ -182,6 +208,7 @@ func _physics_process(delta: float) -> void:
 		return
 	_guard_against_falling()
 	attack_cooldown = maxf(attack_cooldown - delta, 0.0)
+	_camp_pressure(delta)
 	last_known_age += delta
 	if stun_time_left > 0.0:
 		ground_idle(delta)
@@ -403,7 +430,7 @@ func _on_noise_emitted(origin: Vector3, radius: float, noise_type: StringName, s
 		return
 	var ears: Vector3 = get_eye_position()
 	if NoiseManager.can_hear(ears, origin, radius, hearing):
-		if source is PlayerController or source is ThrownBottle or source is TripwireAlarm:
+		if source is PlayerController or source is ThrownBottle:
 			remember(origin)
 		var juan := source as PlayerController
 		if juan != null and juan.is_hidden and absf(origin.y - global_position.y) < 2.0 \

@@ -52,7 +52,6 @@ signal ui_channel_started(label: String, duration: float)
 signal ui_channel_progress(ratio: float)
 signal ui_channel_finished(completed: bool)
 signal ui_gasp_prompt(active: bool, window: float)
-signal ui_crafting_toggled(is_open: bool)
 signal ui_peek_changed(is_peeking: bool)
 signal hallucination_started(kind: StringName, position: Vector3)
 
