@@ -55,6 +55,29 @@ func _ready() -> void:
 	var bottle: Node3D = ItemModel.build(ItemDB.GLASS_BOTTLE)
 	bottle.position = Vector3(0.0, 0.125, 0.0)
 	add_child(bottle)
+	_set_up_animation(cable, bottle)
+
+
+## Juan stretches the cable out from the middle to both weights, then sets
+## the bottle down on it with a little wobble and a clink.
+func _set_up_animation(cable: Node3D, bottle: Node3D) -> void:
+	var weights: Array[Node3D] = []
+	for child: Node in get_children():
+		if child is MeshInstance3D and child != cable and absf((child as Node3D).position.x) > 0.4:
+			weights.append(child as Node3D)
+	cable.scale.x = 0.05
+	for w: Node3D in weights:
+		w.position.x *= 0.05
+	bottle.position.y = 0.32
+	bottle.rotation.z = 0.25
+	var tween: Tween = create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(cable, "scale:x", 1.0, 0.45)
+	for w: Node3D in weights:
+		tween.parallel().tween_property(w, "position:x", signf(w.position.x) * 0.48, 0.45)
+	tween.tween_property(bottle, "position:y", 0.125, 0.25).set_trans(Tween.TRANS_BOUNCE)
+	tween.parallel().tween_property(bottle, "rotation:z", 0.0, 0.35).set_trans(Tween.TRANS_ELASTIC)
+	tween.tween_callback(func() -> void:
+		SfxSynth.play_at(self, SfxSynth.latch_click(), global_position + Vector3.UP * 0.12, -16.0, 1.8, 8.0))
 
 
 func get_interactions(_player: PlayerController) -> Array[Dictionary]:

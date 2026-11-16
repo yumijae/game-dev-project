@@ -121,25 +121,46 @@ static func build_wedge(leaf: Node3D, width: float, inward: float) -> Node3D:
 
 
 ## LAN cable wound round the lever on the room side, ends hanging loose.
-static func build_cable(leaf: Node3D, width: float, inward: float) -> Node3D:
+## `wound` (0..1) builds it part way: the coil grows turn by turn from the
+## first tail, and the second tail and its plug only drop once it is done.
+static func build_cable(leaf: Node3D, width: float, inward: float, wound: float = 1.0) -> Node3D:
 	var holder := Node3D.new()
 	holder.name = "CableTie"
 	leaf.add_child(holder)
+	fill_cable(holder, width, inward, wound)
+	return holder
+
+
+## (Re)builds the cable's meshes inside `holder` for a winding progress.
+static func fill_cable(holder: Node3D, width: float, inward: float, wound: float) -> void:
+	for child: Node in holder.get_children():
+		holder.remove_child(child)
+		child.queue_free()
 	var cable: Material = _material(&"cable")
 	var z0: float = inward * (THICKNESS * 0.5 + 0.062)
 	var centre := Vector3(width - HANDLE_INSET - 0.07, HANDLE_HEIGHT - 0.003, z0)
 	var coil: Array[Vector3] = []
 	var turns: int = 4
 	var steps: int = turns * 14
-	for i: int in steps + 1:
+	var done: int = clampi(int(round(float(steps) * clampf(wound, 0.0, 1.0))), 1, steps)
+	for i: int in done + 1:
 		var a: float = TAU * float(i) / 14.0
 		coil.append(centre + Vector3(-0.025 + 0.05 * float(i) / float(steps), sin(a) * 0.016, cos(a) * 0.016))
 	_mesh(holder, TubeMesh.build(coil, 0.0035, 8), cable)
+	var finished: bool = wound >= 1.0
 	# The two tails: one hanging, one with its RJ45 plug swinging below.
 	# Limp cable: each tail curls out from the coil and droops under its own
 	# weight, swinging slightly away from the door.
 	var plug_at := Vector3.ZERO
-	for tail: Array in [[coil[0], Vector3(-0.05, -0.16, 0.03), -1.0], [coil[-1], Vector3(0.07, -0.24, 0.04), 1.0]]:
+	var tails: Array = [[coil[0], Vector3(-0.05, -0.16, 0.03), -1.0]]
+	if finished:
+		tails.append([coil[-1], Vector3(0.07, -0.24, 0.04), 1.0])
+	else:
+		# The free end is still in Juan's hand: a short stub pulled taut
+		# towards the room.
+		var tip: Vector3 = coil[-1]
+		_mesh(holder, TubeMesh.build([tip, tip + Vector3(0.02, -0.03, inward * 0.09)] as Array[Vector3], 0.0035, 8), cable)
+	for tail: Array in tails:
 		var start: Vector3 = tail[0]
 		var drop: Vector3 = tail[1]
 		var path: Array[Vector3] = []
@@ -150,8 +171,8 @@ static func build_cable(leaf: Node3D, width: float, inward: float) -> Node3D:
 				drop.y * sag, inward * drop.z * sin(t * PI) ))
 		_mesh(holder, TubeMesh.build(path, 0.0035, 8), cable)
 		plug_at = path[-1] + Vector3(0.0, -0.012, 0.0)
-	_box(holder, plug_at, Vector3(0.012, 0.022, 0.014), _material(&"plug"))
-	return holder
+	if finished:
+		_box(holder, plug_at, Vector3(0.012, 0.022, 0.014), _material(&"plug"))
 
 
 # -------------------------------------------------------------------- helpers

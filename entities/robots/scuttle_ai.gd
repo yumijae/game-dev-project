@@ -19,7 +19,13 @@ enum State { DOCKED, ROAM, INVESTIGATE, CHASE, OFF }
 
 const ROAM_SPEED: float = 1.8
 const INVESTIGATE_SPEED: float = 3.0
-const CHASE_SPEED: float = 4.2
+## 3.7 m/s (4.6 by 5 AM): faster than Juan walks, well short of his sprint.
+## It was 4.2 (5.2 late on, nearly his 5.6 sprint) - with no door stopping
+## it, a chase could not be won.
+const CHASE_SPEED: float = 3.7
+## How long it scratches at a door gap before it squeezes under: a warning
+## you can hear, and a moment to get a heavy prop across the gap.
+const DIG_TIME: float = 1.5
 const SQUEEZE_TIME: float = 1.3
 const LOSE_TIME: float = 3.0
 const RETREAT_TIME: float = 9.0
@@ -55,7 +61,7 @@ func _init() -> void:
 	display_name = "SCUTTLE"
 	hostile_id = &"scuttle"
 	vision_range = 6.0
-	hearing = 1.25
+	hearing = 1.1
 	catch_distance = 1.0
 	body_radius = 0.2
 	body_height = 0.42
@@ -199,11 +205,16 @@ func _handle_door(delta: float) -> bool:
 		return false
 	ground_idle(delta)
 	_door_timer += delta
-	if door.can_slip_under():
-		if _door_timer >= 0.25:
-			_squeeze_under(door)
+	var exit_at: Vector3 = _squeeze_exit(door) if door.can_slip_under() else Vector3.INF
+	if exit_at != Vector3.INF:
+		# Digs at the gap first: scratching you can hear through the door.
+		if fmod(_door_timer, 0.4) < delta:
+			SfxSynth.play_at(self, SfxSynth.scrape(), door.get_center() + Vector3.UP * 0.1, -9.0, randf_range(1.9, 2.4), 12.0)
+		if _door_timer >= DIG_TIME:
+			_squeeze_under(door, exit_at)
 		return true
-	# Blocked at the bottom: scratch at it for a moment, then go elsewhere.
+	# Blocked at the bottom (or something stands right behind the door, so
+	# there is nowhere to come out): scratch at it, then go elsewhere.
 	if fmod(_door_timer, 0.7) < delta:
 		SfxSynth.play_at(self, SfxSynth.scrape(), door.get_center() + Vector3.UP * 0.1, -10.0, randf_range(1.9, 2.3), 10.0)
 	if _door_timer >= 2.5:
@@ -216,7 +227,39 @@ func _handle_door(delta: float) -> bool:
 	return true
 
 
-func _squeeze_under(door: InteractableDoor) -> void:
+## Where it can come out on the far side of `door`: walkable floor with room
+## for its body, close behind the door. Vector3.INF when there is none. It
+## used to always pop out 0.9 m past the door, even inside a crate or CPU
+## tower standing there; the physics push-out then drove it through the floor
+## and it fell out of the world.
+func _squeeze_exit(door: InteractableDoor) -> Vector3:
+	var side: float = door.which_side(global_position)
+	var map: RID = get_world_3d().navigation_map
+	var space := get_world_3d().direct_space_state
+	var body := CapsuleShape3D.new()
+	body.radius = body_radius + 0.04
+	body.height = maxf(body_height, body.radius * 2.0 + 0.02)
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = body
+	query.collision_mask = MOVE_MASK
+	query.exclude = [get_rid()]
+	for distance: float in [0.9, 1.2, 0.7, 1.5]:
+		for lateral: float in [0.0, 0.3, -0.3]:
+			var probe: Vector3 = door.get_side_position(-side, distance) + door.get_along() * lateral
+			probe.y = global_position.y
+			var on_mesh: Vector3 = NavigationServer3D.map_get_closest_point(map, probe)
+			if Vector2(on_mesh.x - probe.x, on_mesh.z - probe.z).length() > 0.25 or absf(on_mesh.y - probe.y) > 0.4:
+				continue
+			if door.which_side(on_mesh) == side:
+				continue
+			var spot := Vector3(on_mesh.x, global_position.y, on_mesh.z)
+			query.transform = Transform3D(Basis.IDENTITY, spot + Vector3.UP * (body.height * 0.5 + 0.03))
+			if space.intersect_shape(query, 1).is_empty():
+				return spot
+	return Vector3.INF
+
+
+func _squeeze_under(door: InteractableDoor, out: Vector3) -> void:
 	_squeezing = true
 	_door_timer = 0.0
 	velocity = Vector3.ZERO
@@ -224,8 +267,6 @@ func _squeeze_under(door: InteractableDoor) -> void:
 	var side: float = door.which_side(global_position)
 	var under: Vector3 = door.get_side_position(0.0, 0.0)
 	under.y = global_position.y
-	var out: Vector3 = door.get_side_position(-side, 0.9)
-	out.y = global_position.y
 	face_point(out, 1.0, 0.0)
 	# Now heading away from this door, so it is not "ahead" any more.
 	_desired_direction = (out - under).normalized()

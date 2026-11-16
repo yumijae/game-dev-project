@@ -58,6 +58,12 @@ var sensitivity: float = 1.0
 var invert_y: bool = false
 var fov: float = 80.0
 var master_volume: float = 1.0
+## Everything happening in the building: footsteps, doors, robots, glass.
+var effects_volume: float = 1.0
+## Rain, thunder and the low drone of the empty building.
+var ambience_volume: float = 1.0
+## The phone (clicks, buzzes, notifications) and the hour bell.
+var interface_volume: float = 1.0
 ## Lower the quality automatically when the frame rate is too low to play.
 var auto_quality: bool = true
 ## True when no settings file existed and the preset was picked automatically.
@@ -232,9 +238,30 @@ func _apply_renderer() -> void:
 
 
 func _apply_audio() -> void:
-	var master: int = AudioServer.get_bus_index(&"Master")
-	AudioServer.set_bus_mute(master, master_volume <= 0.001)
-	AudioServer.set_bus_volume_db(master, linear_to_db(maxf(master_volume, 0.001)))
+	_ensure_bus(&"Ambience")
+	_ensure_bus(&"Interface")
+	_set_bus_level(&"Master", master_volume)
+	# "World" belongs to SpatialAudio (every 3D sound, muffled or not).
+	_set_bus_level(&"World", effects_volume)
+	_set_bus_level(&"Ambience", ambience_volume)
+	_set_bus_level(&"Interface", interface_volume)
+
+
+func _ensure_bus(bus_name: StringName) -> void:
+	if AudioServer.get_bus_index(bus_name) >= 0:
+		return
+	var index: int = AudioServer.bus_count
+	AudioServer.add_bus(index)
+	AudioServer.set_bus_name(index, bus_name)
+	AudioServer.set_bus_send(index, &"Master")
+
+
+func _set_bus_level(bus_name: StringName, level: float) -> void:
+	var index: int = AudioServer.get_bus_index(bus_name)
+	if index < 0:
+		return
+	AudioServer.set_bus_mute(index, level <= 0.001)
+	AudioServer.set_bus_volume_db(index, linear_to_db(maxf(level, 0.001)))
 
 
 # ----------------------------------------------------------------------- disk
@@ -257,6 +284,9 @@ func _load() -> void:
 	invert_y = bool(file.get_value("game", "invert_y", invert_y))
 	fov = clampf(float(file.get_value("game", "fov", fov)), FOV_MIN, FOV_MAX)
 	master_volume = clampf(float(file.get_value("audio", "master_volume", master_volume)), 0.0, 1.0)
+	effects_volume = clampf(float(file.get_value("audio", "effects_volume", effects_volume)), 0.0, 1.0)
+	ambience_volume = clampf(float(file.get_value("audio", "ambience_volume", ambience_volume)), 0.0, 1.0)
+	interface_volume = clampf(float(file.get_value("audio", "interface_volume", interface_volume)), 0.0, 1.0)
 
 
 func save() -> void:
@@ -273,4 +303,7 @@ func save() -> void:
 	file.set_value("game", "invert_y", invert_y)
 	file.set_value("game", "fov", fov)
 	file.set_value("audio", "master_volume", master_volume)
+	file.set_value("audio", "effects_volume", effects_volume)
+	file.set_value("audio", "ambience_volume", ambience_volume)
+	file.set_value("audio", "interface_volume", interface_volume)
 	file.save(SAVE_PATH)

@@ -82,6 +82,15 @@ var _was_moving: bool = false
 
 # Active channel (timed interaction); empty when idle.
 var _channel: Dictionary = {}
+## 0..1: how far into "working" posture the view is (eases in and out).
+var _work: float = 0.0
+var _work_phase: float = 0.0
+## Lean, heave and sway of the view while Juan's hands are busy (metres /
+## radians); heavier for labour, shakier with shaky hands.
+const WORK_DIP: float = 0.1
+const WORK_DIP_LABOUR: float = 0.17
+const WORK_BOB: float = 0.012
+const WORK_ROLL: float = 0.012
 
 
 func _ready() -> void:
@@ -296,10 +305,31 @@ func _physics_process(delta: float) -> void:
 			move_and_slide()
 	else:
 		_move(delta)
+	_update_work_motion(delta)
 	_focus_timer += delta
 	if _focus_timer >= FOCUS_REFRESH_INTERVAL:
 		_focus_timer = 0.0
 		_refresh_focus(false)
+
+
+## While a timed action runs, the view leans in towards the work and heaves
+## gently with each effort (a heavy drag much more), then eases back.
+func _update_work_motion(delta: float) -> void:
+	var working: bool = is_channeling()
+	_work = move_toward(_work, 1.0 if working else 0.0, delta * (3.0 if working else 4.0))
+	if _work <= 0.0:
+		if camera.position != Vector3.ZERO or camera.rotation.z != 0.0:
+			camera.position = Vector3.ZERO
+			camera.rotation.z = 0.0
+		return
+	var labour: bool = working and float(_channel.get("stamina_cost", 0.0)) > 0.0
+	var shaky: float = 1.8 if stats.has_shaky_hands else 1.0
+	_work_phase += delta * (4.2 if labour else 7.0)
+	var ease: float = _work * _work * (3.0 - 2.0 * _work)
+	var dip: float = (WORK_DIP_LABOUR if labour else WORK_DIP) * ease
+	var bob: float = sin(_work_phase) * WORK_BOB * (2.4 if labour else 1.0) * shaky * ease
+	camera.position = Vector3(sin(_work_phase * 0.5) * 0.006 * shaky * ease, -dip + bob, -0.04 * ease)
+	camera.rotation.z = sin(_work_phase * 0.5 + 0.7) * WORK_ROLL * (2.0 if labour else 1.0) * shaky * ease
 
 
 func _move(delta: float) -> void:
@@ -453,6 +483,9 @@ func is_busy() -> bool:
 ##   can_fumble   - false for silent, careful work (default true)
 ##   on_cancel    - Callable(elapsed: float) when interrupted
 ##   on_tick      - Callable(delta: float) every physics frame
+##   on_progress  - Callable(ratio: float) every physics frame, 0..1: drives
+##                  the animation of whatever is being built (a chair swung
+##                  under a handle, a cable wound round it, a prop dragged)
 func start_channel(label: String, duration: float, on_complete: Callable, options: Dictionary = {}) -> bool:
 	if is_channeling() or is_peeking or is_dead:
 		return false
@@ -471,6 +504,7 @@ func start_channel(label: String, duration: float, on_complete: Callable, option
 		"noise_type": options.get("noise_type", &""), "noise_radius": options.get("noise_radius", 0.0),
 		"noise_interval": options.get("noise_interval", 1.0),
 		"on_cancel": options.get("on_cancel", Callable()), "on_tick": options.get("on_tick", Callable()),
+		"on_progress": options.get("on_progress", Callable()),
 	}
 	velocity = Vector3.ZERO
 	EventBus.ui_channel_started.emit(label, time)
@@ -511,6 +545,9 @@ func _update_channel(delta: float) -> void:
 	if fumble_at > 0.0 and elapsed >= fumble_at:
 		_fumble()
 		return
+	var on_progress: Callable = _channel["on_progress"]
+	if on_progress.is_valid():
+		on_progress.call(clampf(elapsed / time, 0.0, 1.0))
 	EventBus.ui_channel_progress.emit(clampf(elapsed / time, 0.0, 1.0))
 	if elapsed >= time:
 		var on_complete: Callable = _channel["on_complete"]
@@ -678,6 +715,8 @@ func use_active_item() -> void:
 				-camera.global_transform.basis.z * 12.0 + Vector3.UP * 2.5)
 		ItemDB.FIRE_EXTINGUISHER:
 			_spray_extinguisher()
+		ItemDB.TASER:
+			_fire_taser()
 		ItemDB.TRIPWIRE:
 			inventory.remove_item(item_id, 1)
 			EventBus.item_used.emit(item_id)
@@ -749,6 +788,89 @@ func _spray_extinguisher() -> void:
 		EventBus.ui_notification.emit("The extinguisher coughs and runs empty.", 2.5)
 	elif hit_any:
 		EventBus.ui_notification.emit("Direct hit. It's blinded - move.", 2.0)
+
+
+const TASER_REACH: float = 1.9
+const TASER_CONE: float = 40.0
+const TASER_NOISE: float = 7.0
+
+
+## Jabs the robot in front of Juan, if one is within arm's reach. The taser
+## is single use: it is spent only when it connects.
+func _fire_taser() -> void:
+	var eye: Vector3 = camera.global_position
+	var forward: Vector3 = -camera.global_transform.basis.z
+	var target: RobotBase = null
+	var best: float = INF
+	for node: Node in get_tree().get_nodes_in_group(&"hostiles"):
+		var robot := node as RobotBase
+		if robot == null or not robot.is_active:
+			continue
+		var centre: Vector3 = robot.global_position + Vector3.UP * minf(robot.body_height * 0.6, 1.0)
+		var to_robot: Vector3 = centre - eye
+		var flat_gap: float = Vector2(robot.global_position.x - global_position.x, robot.global_position.z - global_position.z).length()
+		if flat_gap - robot.body_radius > TASER_REACH or rad_to_deg(forward.angle_to(to_robot)) > TASER_CONE:
+			continue
+		var query := PhysicsRayQueryParameters3D.create(eye, centre, 1 | 8)
+		if not get_world_3d().direct_space_state.intersect_ray(query).is_empty():
+			continue
+		if flat_gap < best:
+			best = flat_gap
+			target = robot
+	var tip: Vector3 = eye + forward * 0.55 + Vector3.DOWN * 0.18
+	if target == null:
+		# A dry crackle: nothing in reach, and the shot is kept.
+		SfxSynth.play_at(self, SfxSynth.zap(), tip, -12.0, 1.3, 12.0)
+		EventBus.ui_notification.emit("Nothing in reach. Get closer.", 1.6)
+		return
+	inventory.remove_item(ItemDB.TASER, 1)
+	EventBus.item_used.emit(ItemDB.TASER)
+	var hit_at: Vector3 = target.global_position + Vector3.UP * minf(target.body_height * 0.6, 1.0)
+	SfxSynth.play_at(self, SfxSynth.zap(), hit_at, 2.0, 1.0, 26.0)
+	NoiseManager.emit_noise(global_position, TASER_NOISE, &"taser", self)
+	_taser_flash(hit_at)
+	var dropped: bool = target.take_taser()
+	if dropped:
+		SfxSynth.play_at(self, SfxSynth.thud(), target.global_position + Vector3.UP * 0.3, 0.0, 0.7)
+
+
+## Blue-white arc light and a spray of sparks where the prongs land.
+func _taser_flash(at: Vector3) -> void:
+	var scene: Node = get_tree().current_scene
+	var flash := OmniLight3D.new()
+	flash.light_color = Color(0.6, 0.75, 1.0)
+	flash.light_energy = 3.0
+	flash.omni_range = 3.0
+	LightRig.seal(flash, 0.02)
+	scene.add_child(flash)
+	flash.global_position = at
+	var tween: Tween = flash.create_tween()
+	for i: int in 3:
+		tween.tween_property(flash, "light_energy", 0.4, 0.04)
+		tween.tween_property(flash, "light_energy", 3.0, 0.03)
+	tween.tween_property(flash, "light_energy", 0.0, 0.12)
+	tween.tween_callback(flash.queue_free)
+	var sparks := CPUParticles3D.new()
+	sparks.one_shot = true
+	sparks.explosiveness = 0.95
+	sparks.amount = 28
+	sparks.lifetime = 0.45
+	sparks.spread = 90.0
+	sparks.initial_velocity_min = 1.0
+	sparks.initial_velocity_max = 3.0
+	sparks.gravity = Vector3(0, -9.8, 0)
+	var spark := BoxMesh.new()
+	spark.size = Vector3(0.004, 0.004, 0.022)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(0.75, 0.85, 1.0)
+	spark.material = mat
+	sparks.mesh = spark
+	sparks.particle_flag_align_y = true
+	scene.add_child(sparks)
+	sparks.global_position = at
+	sparks.emitting = true
+	get_tree().create_timer(1.0).timeout.connect(sparks.queue_free)
 
 
 func _spray_cloud(from: Vector3, forward: Vector3) -> void:

@@ -5,7 +5,7 @@ extends RefCounted
 
 const GLASS_BOTTLE: StringName = &"glass_bottle"
 const FIRE_EXTINGUISHER: StringName = &"fire_extinguisher"
-const SCREWDRIVER: StringName = &"screwdriver"
+const TASER: StringName = &"taser"
 const TRIPWIRE: StringName = &"tripwire_alarm"
 const TABLECLOTH_RAG: StringName = &"tablecloth_rag"
 const GAUZE: StringName = &"gauze"
@@ -26,8 +26,8 @@ const ITEMS: Dictionary = {
 		"use": "Throw", "desc": "Empty. Throw it and it smashes loudly where it lands - every robot that hears it goes to look."},
 	FIRE_EXTINGUISHER: {"name": "Fire Extinguisher", "stack": 3, "color": Color(0.78, 0.08, 0.06), "size": Vector3(0.14, 0.42, 0.14),
 		"use": "Spray (one burst)", "desc": "CO2. A burst in a robot's face whites out its sensors: it stops dead for a few seconds and loses you. The number is bursts left."},
-	SCREWDRIVER: {"name": "Screwdriver", "stack": 1, "color": Color(0.95, 0.75, 0.1), "size": Vector3(0.2, 0.025, 0.025),
-		"desc": "Get close to a robot that can't move - frozen, sprayed or stunned - and pry out its battery (4 s). The tip snaps after one."},
+	TASER: {"name": "Taser", "stack": 3, "color": Color(0.95, 0.78, 0.1), "size": Vector3(0.16, 0.04, 0.06),
+		"use": "Zap (single use)", "desc": "Campus security's cheap stun gun - good for one shot. Zap a robot within arm's reach and it locks up for a few seconds. POSE drops completely and stays down - until CONCIERGE comes to reboot it."},
 	TRIPWIRE: {"name": "Bottle Tripwire", "stack": 2, "color": Color(0.4, 0.6, 0.7), "size": Vector3(0.16, 0.1, 0.16),
 		"use": "Set across the way ahead", "desc": "A bottle balanced on a LAN cable at ankle height. The first robot through knocks it over - you will hear it from far away."},
 	TABLECLOTH_RAG: {"name": "Tablecloth Rag", "stack": 2, "color": Color(0.9, 0.9, 0.95), "size": Vector3(0.2, 0.03, 0.2),

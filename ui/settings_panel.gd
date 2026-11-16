@@ -132,9 +132,12 @@ func _build_game(page: VBoxContainer) -> void:
 
 
 func _build_audio(page: VBoxContainer) -> void:
-	_slider(page, "Master volume", 0.0, 1.0, 0.05, GameSettings.master_volume,
-		func(value: float) -> String: return "%d%%" % roundi(value * 100.0),
-		func(value: float) -> void: GameSettings.set_value(&"master_volume", value))
+	for knob: Array in [["Master volume", &"master_volume"], ["Effects", &"effects_volume"],
+			["Ambience (rain, thunder)", &"ambience_volume"], ["Phone & interface", &"interface_volume"]]:
+		var key: StringName = knob[1]
+		_slider(page, knob[0], 0.0, 1.0, 0.05, float(GameSettings.get(key)),
+			func(value: float) -> String: return "%d%%" % roundi(value * 100.0),
+			func(value: float) -> void: GameSettings.set_value(key, value))
 
 
 func _build_controls(page: VBoxContainer) -> void:

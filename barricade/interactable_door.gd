@@ -54,6 +54,9 @@ var _wedge_mesh: Node3D = null
 var _cable_mesh: Node3D = null
 var _thumb_turn: Node3D = null
 var _wedge_rest: Transform3D = Transform3D.IDENTITY
+## Progress last seen by a barricade animation, so its sounds fire once.
+var _anim_mark: float = 0.0
+var _cable_wound: float = -1.0
 
 
 func _ready() -> void:
@@ -183,17 +186,29 @@ func interact(player: PlayerController, action_id: StringName) -> void:
 		&"close":
 			set_open(false)
 		&"lock":
-			player.start_channel("Locking the door", LOCK_TIME, _set_handle.bind(HandleState.LOCKED), {"can_fumble": false})
+			_anim_mark = 0.0
+			player.start_channel("Locking the door", LOCK_TIME, _set_handle.bind(HandleState.LOCKED), {"can_fumble": false,
+				"on_progress": _turn_thumb.bind(true), "on_cancel": _restore_barricade_look.unbind(1)})
 		&"unlock":
-			player.start_channel("Unlocking the door", LOCK_TIME, _set_handle.bind(HandleState.UNLOCKED), {"can_fumble": false})
+			_anim_mark = 0.0
+			player.start_channel("Unlocking the door", LOCK_TIME, _set_handle.bind(HandleState.UNLOCKED), {"can_fumble": false,
+				"on_progress": _turn_thumb.bind(false), "on_cancel": _restore_barricade_look.unbind(1)})
 		&"wedge":
-			player.start_channel("Wedging the chair under the handle", WEDGE_TIME, _finish_wedge.bind(player))
+			_anim_mark = 0.0
+			player.start_channel("Wedging the chair under the handle", WEDGE_TIME, _finish_wedge.bind(player), {
+				"on_progress": _wedge_in, "on_cancel": _restore_barricade_look.unbind(1)})
 		&"unwedge":
-			player.start_channel("Pulling the chair away", 1.5, _finish_unwedge.bind(player))
+			_anim_mark = 0.0
+			player.start_channel("Pulling the chair away", 1.5, _finish_unwedge.bind(player), {
+				"on_progress": _wedge_out, "on_cancel": _restore_barricade_look.unbind(1)})
 		&"tie":
-			player.start_channel("Tying the handle with LAN cable", CABLE_TIE_TIME, _finish_tie.bind(player), {"can_fumble": false})
+			_anim_mark = 0.0
+			player.start_channel("Tying the handle with LAN cable", CABLE_TIE_TIME, _finish_tie.bind(player), {"can_fumble": false,
+				"on_progress": _wind_cable.bind(true), "on_cancel": _restore_barricade_look.unbind(1)})
 		&"untie":
-			player.start_channel("Untying the LAN cable", 2.0, _finish_untie.bind(player), {"can_fumble": false})
+			_anim_mark = 0.0
+			player.start_channel("Untying the LAN cable", 2.0, _finish_untie.bind(player), {"can_fumble": false,
+				"on_progress": _wind_cable.bind(false), "on_cancel": _restore_barricade_look.unbind(1)})
 		&"unblock":
 			if blocking_prop != null:
 				blocking_prop.begin_pull_away(player)
@@ -257,16 +272,17 @@ func _rattle() -> void:
 
 func _set_handle(state: HandleState) -> void:
 	if is_open or is_broken:
+		_restore_barricade_look()
 		return
 	handle_state = state
 	_update_thumb_turn()
+	SfxSynth.play_at(self, SfxSynth.latch_click(), get_center() + Vector3.UP, -10.0, 1.15 if state == HandleState.LOCKED else 1.0, 14.0)
 	EventBus.door_state_changed.emit(self)
 
 
 func _finish_wedge(player: PlayerController) -> void:
-	if is_open or is_broken or handle_state != HandleState.UNLOCKED:
-		return
-	if not player.inventory.remove_item(ItemDB.CHAIR, 1):
+	if is_open or is_broken or handle_state != HandleState.UNLOCKED or not player.inventory.remove_item(ItemDB.CHAIR, 1):
+		_restore_barricade_look()
 		return
 	handle_state = HandleState.CHAIR_WEDGED
 	wedge_shoves_left = WEDGE_SHOVES
@@ -285,9 +301,8 @@ func _finish_unwedge(player: PlayerController) -> void:
 
 
 func _finish_tie(player: PlayerController) -> void:
-	if is_open or is_broken or handle_state != HandleState.UNLOCKED:
-		return
-	if not player.inventory.remove_item(ItemDB.LAN_CABLE, 1):
+	if is_open or is_broken or handle_state != HandleState.UNLOCKED or not player.inventory.remove_item(ItemDB.LAN_CABLE, 1):
+		_restore_barricade_look()
 		return
 	handle_state = HandleState.CABLE_TIED
 	_show_cable(true)
@@ -424,8 +439,104 @@ func _wedge_slip() -> void:
 func _show_cable(visible_now: bool) -> void:
 	if _cable_mesh == null and visible_now and _leaf != null:
 		_cable_mesh = DoorDressing.build_cable(_leaf, door_width, _local_room_sign())
+		_cable_wound = 1.0
 	if _cable_mesh != null:
+		if visible_now and not is_equal_approx(_cable_wound, 1.0):
+			_cable_wound = 1.0
+			DoorDressing.fill_cable(_cable_mesh, door_width, _local_room_sign(), 1.0)
 		_cable_mesh.visible = visible_now
+
+
+# ----------------------------------------------------- barricade animations
+# Each runs off the channel's progress (PlayerController "on_progress"), so it
+# keeps pace with shaky hands and stops dead if Juan is interrupted.
+
+## True on the frame the animation passes `mark` (0..1).
+func _passed(ratio: float, mark: float) -> bool:
+	return _anim_mark < mark and ratio >= mark
+
+
+## The chair's pose: 0 = held upright a step into the room, 1 = jammed.
+func _wedge_pose(amount: float) -> Transform3D:
+	var away: float = _local_room_sign()
+	var e: float = 1.0 - pow(1.0 - clampf(amount, 0.0, 1.0), 3.0)
+	var held := Transform3D(Basis(Vector3.RIGHT, away * 0.55), Vector3(0.0, 0.12, away * 0.42))
+	return held.interpolate_with(Transform3D.IDENTITY, e) * _wedge_rest
+
+
+## Swings the chair in and tips it under the lever (first 70%), then three
+## shoves bed it home, each a little smaller, with a creak; a thunk to finish.
+func _wedge_in(ratio: float) -> void:
+	if _leaf == null:
+		return
+	_show_wedge(true)
+	var xf: Transform3D = _wedge_pose(ratio / 0.7)
+	if ratio > 0.7:
+		var shove: float = (ratio - 0.7) / 0.3 * 3.0
+		var kick: float = maxf(sin(fposmod(shove, 1.0) * PI), 0.0) * (0.035 - 0.009 * floorf(shove))
+		xf.origin += Vector3(0.0, 0.0, _local_room_sign() * kick)
+	_wedge_mesh.transform = xf
+	var at: Vector3 = get_center() + Vector3.UP * 0.9
+	if _passed(ratio, 0.05):
+		SfxSynth.play_at(self, SfxSynth.scrape(), get_center() + Vector3.UP * 0.1, -14.0, 1.4, 12.0)
+	for mark: float in [0.78, 0.88, 0.97]:
+		if _passed(ratio, mark):
+			SfxSynth.play_at(self, SfxSynth.chair_creak(), at, -10.0, randf_range(0.9, 1.1), 14.0)
+	if _passed(ratio, 0.995):
+		SfxSynth.play_at(self, SfxSynth.thud(), at, -12.0, 1.5, 14.0)
+	_anim_mark = ratio
+
+
+func _wedge_out(ratio: float) -> void:
+	if _wedge_mesh == null:
+		return
+	_wedge_mesh.transform = _wedge_pose(1.0 - ratio)
+	if _passed(ratio, 0.02):
+		SfxSynth.play_at(self, SfxSynth.chair_creak(), get_center() + Vector3.UP * 0.9, -10.0, 1.2, 14.0)
+	_anim_mark = ratio
+
+
+## Winds the cable round the lever turn by turn (or off again), with the soft
+## rasp of the cable every quarter.
+func _wind_cable(ratio: float, tying: bool) -> void:
+	if _leaf == null:
+		return
+	var wound: float = maxf(floorf((ratio if tying else 1.0 - ratio) * 28.0) / 28.0, 0.04)
+	if _cable_mesh == null:
+		_cable_mesh = DoorDressing.build_cable(_leaf, door_width, _local_room_sign(), wound)
+		_cable_wound = wound
+	_cable_mesh.visible = true
+	if not is_equal_approx(wound, _cable_wound):
+		_cable_wound = wound
+		DoorDressing.fill_cable(_cable_mesh, door_width, _local_room_sign(), minf(wound, 0.999))
+	for mark: float in [0.02, 0.27, 0.52, 0.77]:
+		if _passed(ratio, mark):
+			SfxSynth.play_at(self, SfxSynth.scrape(), get_center() + Vector3.UP, -18.0, randf_range(2.2, 2.6), 8.0)
+	_anim_mark = ratio
+
+
+## Turns the thumb-turn a quarter as Juan locks or unlocks.
+func _turn_thumb(ratio: float, locking: bool) -> void:
+	if _thumb_turn == null:
+		return
+	var e: float = ratio * ratio * (3.0 - 2.0 * ratio)
+	_thumb_turn.rotation.z = PI * 0.5 * (e if locking else 1.0 - e)
+
+
+## Puts the barricade visuals back to match the door's real state (after an
+## interrupted or refused action).
+func _restore_barricade_look() -> void:
+	_anim_mark = 0.0
+	_update_thumb_turn()
+	if _wedge_mesh != null:
+		_wedge_mesh.transform = _wedge_rest
+		_wedge_mesh.visible = handle_state == HandleState.CHAIR_WEDGED and not is_open
+	if _cable_mesh != null:
+		var tied: bool = handle_state == HandleState.CABLE_TIED and not is_open
+		_cable_mesh.visible = tied
+		if tied and not is_equal_approx(_cable_wound, 1.0):
+			_cable_wound = 1.0
+			DoorDressing.fill_cable(_cable_mesh, door_width, _local_room_sign(), 1.0)
 
 
 ## Sign of the room side along the closed door's local Z axis.

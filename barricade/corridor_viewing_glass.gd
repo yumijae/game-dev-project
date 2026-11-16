@@ -130,14 +130,19 @@ func get_interactions(player: PlayerController) -> Array[Dictionary]:
 func interact(player: PlayerController, action_id: StringName) -> void:
 	match action_id:
 		&"tape":
-			player.start_channel("Taping black card over the glass", TAPE_TIME, _finish_tape.bind(player))
+			_sheets_heard = 0
+			player.start_channel("Taping black card over the glass", TAPE_TIME, _finish_tape.bind(player), {
+				"on_progress": _unroll_card, "on_cancel": func(_elapsed: float) -> void: _show_card(0.0)})
 		&"untape":
-			_set_blacked_out(false)
+			_tear_card_off()
 
 
 func _finish_tape(player: PlayerController) -> void:
 	if is_shattered or is_blacked_out or not player.inventory.remove_item(ItemDB.BLACKOUT_KIT, 1):
+		_show_card(0.0)
 		return
+	_show_card(1.0)
+	SfxSynth.play_at(self, SfxSynth.paper(), global_position, -6.0, 0.8, 12.0)
 	_set_blacked_out(true)
 	EventBus.ui_notification.emit("Blacked out. Nothing in the corridor can see in through this glass.", 3.0)
 
@@ -145,16 +150,74 @@ func _finish_tape(player: PlayerController) -> void:
 func _set_blacked_out(enabled: bool) -> void:
 	is_blacked_out = enabled
 	collision_layer = LAYER_GLASS | (1 if enabled else 0)
-	var pane := get_node_or_null("Pane") as MeshInstance3D
-	if pane == null:
+
+
+## Sheets of black card taped up side by side, each unrolled top to bottom.
+const CARD_SHEETS: int = 3
+var _card: Node3D = null
+var _sheets_heard: int = 0
+
+
+## Shows the card covering `amount` (0..1) of the bay: sheet by sheet, each
+## one unrolling down the glass from the top rail.
+func _show_card(amount: float) -> void:
+	if amount <= 0.0:
+		if _card != null:
+			_card.queue_free()
+			_card = null
 		return
-	if not enabled:
-		pane.material_override = null
+	if _card == null:
+		_card = Node3D.new()
+		_card.name = "BlackCard"
+		add_child(_card)
+		var material := StandardMaterial3D.new()
+		material.albedo_color = Color(0.035, 0.035, 0.04)
+		material.roughness = 0.95
+		var sheet_w: float = (width - 0.06) / float(CARD_SHEETS)
+		for i: int in CARD_SHEETS:
+			var mesh := BoxMesh.new()
+			mesh.size = Vector3(sheet_w - 0.01, height - 0.08, 0.004)
+			mesh.material = material
+			var sheet := MeshInstance3D.new()
+			sheet.mesh = mesh
+			sheet.position.x = -width * 0.5 + 0.03 + sheet_w * (float(i) + 0.5)
+			sheet.visible = false
+			_card.add_child(sheet)
+	# On the room side of the glass, where Juan stands to tape it.
+	_card.position.z = 0.012 if room_side.dot(global_basis.z) >= 0.0 else -0.012
+	var full_h: float = height - 0.08
+	for i: int in _card.get_child_count():
+		var sheet := _card.get_child(i) as MeshInstance3D
+		var share: float = clampf(amount * float(CARD_SHEETS) - float(i), 0.0, 1.0)
+		sheet.visible = share > 0.0
+		var unrolled: float = maxf(share, 0.02)
+		sheet.scale.y = unrolled
+		# Hang from the top rail: shift down by half of what is unrolled.
+		sheet.position.y = full_h * 0.5 * (1.0 - unrolled)
+
+
+func _unroll_card(ratio: float) -> void:
+	_show_card(ratio)
+	var sheet: int = mini(int(ratio * float(CARD_SHEETS)), CARD_SHEETS - 1)
+	if sheet >= _sheets_heard and ratio < 1.0:
+		_sheets_heard = sheet + 1
+		SfxSynth.play_at(self, SfxSynth.paper(), global_position, -8.0, randf_range(0.95, 1.1), 12.0)
+
+
+## Rips the card away: the sheets fall off one after another.
+func _tear_card_off() -> void:
+	_set_blacked_out(false)
+	SfxSynth.play_at(self, SfxSynth.paper(), global_position, -4.0, 1.25, 14.0)
+	if _card == null:
 		return
-	var card := StandardMaterial3D.new()
-	card.albedo_color = Color(0.03, 0.03, 0.035)
-	card.roughness = 0.95
-	pane.material_override = card
+	var card: Node3D = _card
+	_card = null
+	var tween: Tween = create_tween()
+	for i: int in card.get_child_count():
+		var sheet := card.get_child(i) as Node3D
+		tween.tween_property(sheet, "position:y", sheet.position.y - 0.25, 0.12).set_ease(Tween.EASE_IN)
+		tween.parallel().tween_property(sheet, "scale:y", 0.02, 0.12)
+	tween.tween_callback(card.queue_free)
 
 
 ## +1.0 if `pos` is on the lab side of the pane, -1.0 on the corridor side.
@@ -174,6 +237,8 @@ func shatter(landing_side: float = 1.0) -> void:
 	if is_shattered:
 		return
 	is_shattered = true
+	_show_card(0.0)
+	_set_blacked_out(false)
 	var pane := get_node_or_null("Pane") as MeshInstance3D
 	if pane != null:
 		pane.visible = false

@@ -11,7 +11,7 @@ const SAMPLE_DIR: String = "res://audio/sfx/"
 const SAMPLES: Dictionary = {
 	&"shoe_step": 8, &"glass_shatter": 6, &"glass_crunch": 3, &"thud": 5, &"knock": 2,
 	&"latch_click": 4, &"clatter": 4, &"keys_jingle": 3, &"door_open": 2, &"door_close": 5,
-	&"thunder": 1, &"spray": 1, &"rain": 1,
+	&"thunder": 1, &"spray": 1, &"rain": 1, &"paper": 4, &"chair_creak": 2,
 }
 const LOOPED_SAMPLES: Array[StringName] = [&"rain"]
 
@@ -37,6 +37,34 @@ static func _sample(cue: StringName) -> AudioStream:
 			(stream as AudioStreamOggVorbis).loop = LOOPED_SAMPLES.has(cue)
 		_samples[path] = stream
 	return _samples[path]
+
+
+## A stun gun's arc: a harsh buzzing crackle with sharp snaps through it.
+static func zap() -> AudioStream:
+	return _cached(&"zap", func() -> PackedFloat32Array:
+		var length: float = 0.55
+		var samples: PackedFloat32Array = _silence(length)
+		var phase: float = 0.0
+		for i: int in samples.size():
+			var t: float = float(i) / MIX_RATE
+			phase += TAU * (58.0 + randf_range(-6.0, 6.0)) / MIX_RATE
+			var buzz: float = clampf(sin(phase) * 6.0, -1.0, 1.0) * 0.35 + clampf(sin(phase * 3.0) * 4.0, -1.0, 1.0) * 0.15
+			var crackle: float = randf_range(-1.0, 1.0) * (0.9 if randf() < 0.08 else 0.25)
+			var env: float = minf(t * 300.0, 1.0) * minf((length - t) * 12.0, 1.0)
+			samples[i] = (buzz + crackle) * env * 0.8
+		return samples)
+
+
+## Card or tape rustling while it is put up or torn down.
+static func paper() -> AudioStream:
+	var recorded: AudioStream = _sample(&"paper")
+	return recorded if recorded != null else scrape()
+
+
+## A plastic chair creaking as it is jammed under a handle.
+static func chair_creak() -> AudioStream:
+	var recorded: AudioStream = _sample(&"chair_creak")
+	return recorded if recorded != null else metal_creak()
 
 
 ## A door handle turning and the leaf coming off its latch.
@@ -477,13 +505,16 @@ static func play_at(host: Node, stream: AudioStream, position: Vector3, volume_d
 
 
 ## Fire-and-forget non-positional sound (inside Juan's head, UI, the bell).
-static func play_ui(host: Node, stream: AudioStream, volume_db: float = 0.0, pitch: float = 1.0) -> AudioStreamPlayer:
+static func play_ui(host: Node, stream: AudioStream, volume_db: float = 0.0, pitch: float = 1.0,
+		bus: StringName = &"Interface") -> AudioStreamPlayer:
 	if host == null or not host.is_inside_tree() or stream == null:
 		return null
 	var player := AudioStreamPlayer.new()
 	player.stream = stream
 	player.volume_db = volume_db
 	player.pitch_scale = pitch
+	if AudioServer.get_bus_index(bus) >= 0:
+		player.bus = bus
 	host.get_tree().root.add_child(player)
 	player.finished.connect(player.queue_free)
 	player.play()

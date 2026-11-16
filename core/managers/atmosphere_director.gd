@@ -211,7 +211,7 @@ func _strike() -> void:
 	var distance: float = _rng.randf_range(0.3, 2.6)
 	await get_tree().create_timer(distance).timeout
 	if is_inside_tree():
-		SfxSynth.play_ui(self, SfxSynth.thunder(), lerpf(-3.0, -15.0, distance / 2.6), _rng.randf_range(0.8, 1.1))
+		SfxSynth.play_ui(self, SfxSynth.thunder(), lerpf(-3.0, -15.0, distance / 2.6), _rng.randf_range(0.8, 1.1), &"Ambience")
 
 
 func _end_strike() -> void:
@@ -488,7 +488,7 @@ func _rain_bus() -> StringName:
 		index = AudioServer.bus_count
 		AudioServer.add_bus(index)
 		AudioServer.set_bus_name(index, &"Rain")
-		AudioServer.set_bus_send(index, &"Master")
+		AudioServer.set_bus_send(index, &"Ambience" if AudioServer.get_bus_index(&"Ambience") >= 0 else &"Master")
 		_rain_filter = AudioEffectLowPassFilter.new()
 		_rain_filter.cutoff_hz = 900.0
 		AudioServer.add_bus_effect(index, _rain_filter)
@@ -509,6 +509,8 @@ func _start_audio() -> void:
 	drone.name = "Drone"
 	drone.stream = SfxSynth.drone()
 	drone.volume_db = -17.0
+	if AudioServer.get_bus_index(&"Ambience") >= 0:
+		drone.bus = &"Ambience"
 	add_child(drone)
 	drone.play()
 

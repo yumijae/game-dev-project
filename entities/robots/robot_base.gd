@@ -47,6 +47,10 @@ var last_known: Vector3 = Vector3.INF
 var last_known_age: float = INF
 ## The dock it charges on; where it stands before midnight.
 var home: Transform3D = Transform3D.IDENTITY
+## Last spot it stood on solid, walkable floor; where it is put back if it
+## ever drops through the world (a bad physics push-out).
+var _last_safe: Vector3 = Vector3.INF
+const FALL_RESCUE_DROP: float = 2.0
 ## When it last had Juan in sight (ms): hiding in front of it fools nobody.
 var _last_saw_ms: int = -1000000
 const SAW_RECENTLY_MS: int = 1500
@@ -77,7 +81,7 @@ func kind() -> StringName:
 
 
 func _ready() -> void:
-	# Layer 2 so Juan's interaction ray can find it (screwdriver).
+	# Layer 2 so Juan's interaction ray can find it.
 	collision_layer = LAYER_ROBOT | 2
 	collision_mask = MOVE_MASK
 	floor_snap_length = 0.4
@@ -176,6 +180,7 @@ func _physics_process(delta: float) -> void:
 	super(delta)
 	if not is_active:
 		return
+	_guard_against_falling()
 	attack_cooldown = maxf(attack_cooldown - delta, 0.0)
 	last_known_age += delta
 	if stun_time_left > 0.0:
@@ -212,43 +217,129 @@ func _on_heard(_origin: Vector3, _noise_type: StringName, _audibility: float) ->
 	pass
 
 
-# ---------------------------------------------------------------- screwdriver
+# ------------------------------------------------------------------- hivemind
+# The rogue firmware links the robots through the server: one that is stuck
+# behind a door it cannot open (CONCIERGE has no hands) calls the nearest
+# robot that can, and that one comes over and opens it.
 
-const PRY_TIME: float = 3.5
-const PRY_NOISE: float = 5.0
-
-
-## True while it cannot move, so Juan can get his hands on its battery.
-func can_be_pried() -> bool:
-	return is_active and stun_time_left > 0.0
-
-
-func get_interactions(player: PlayerController) -> Array[Dictionary]:
-	var actions: Array[Dictionary] = []
-	if is_active and can_be_pried() and player.inventory.has_item(ItemDB.SCREWDRIVER):
-		actions.append({"id": &"pry", "label": "Pry out its battery (%d s)" % int(ceil(PRY_TIME))})
-	return actions
+## How long a call for help stays open, and how far a helper will travel.
+const HELP_TIMEOUT: float = 30.0
+const HELP_MAX_PATH: float = 45.0
+## The door another robot asked this one to open (null when not helping).
+var help_door: InteractableDoor = null
+var _help_until: float = 0.0
+var _help_timer: float = 0.0
 
 
-func interact(player: PlayerController, action_id: StringName) -> void:
-	if action_id != &"pry":
-		return
-	player.start_channel("Prying out %s's battery" % display_name, PRY_TIME, _finish_pry.bind(player), {
-		"noise_type": &"metal_clatter", "noise_radius": PRY_NOISE, "noise_interval": 1.0,
-	})
+## True for robots with hands that can turn a door handle.
+func can_open_doors() -> bool:
+	return false
 
 
-func _finish_pry(player: PlayerController) -> void:
+## Asks the closest robot with hands (by walking distance) to come and open
+## `door`. Returns that robot, or null when none is free and near enough.
+static func call_for_help(door: InteractableDoor, asker: Node3D) -> RobotBase:
+	if door == null or not door.can_robot_open():
+		return null
+	var tree: SceneTree = asker.get_tree()
+	var best: RobotBase = null
+	var best_length: float = HELP_MAX_PATH
+	var map: RID = asker.get_world_3d().navigation_map
+	for node: Node in tree.get_nodes_in_group(&"hostiles"):
+		var robot := node as RobotBase
+		if robot == null or robot == asker or not robot.is_threatening() or robot.is_disabled or not robot.can_open_doors():
+			continue
+		if robot.help_door == door:
+			return robot
+		if robot.help_door != null and robot.is_helping():
+			continue
+		var path: PackedVector3Array = NavigationServer3D.map_get_path(map, robot.global_position,
+			door.get_side_position(door.which_side(robot.global_position), 0.75), true)
+		if path.size() < 2:
+			continue
+		var length: float = 0.0
+		for i: int in range(1, path.size()):
+			length += path[i - 1].distance_to(path[i])
+		if length < best_length:
+			best_length = length
+			best = robot
+	if best != null:
+		best.help_door = door
+		best._help_until = Time.get_ticks_msec() / 1000.0 + HELP_TIMEOUT
+		best._help_timer = 0.0
+	return best
+
+
+## Still on its way to open a door for another robot.
+func is_helping() -> bool:
+	if help_door == null:
+		return false
+	if not is_instance_valid(help_door) or help_door.is_passable() or not help_door.can_robot_open() \
+			or Time.get_ticks_msec() / 1000.0 > _help_until:
+		help_door = null
+		return false
+	return true
+
+
+## Walks to the door it was asked to open and turns the handle. Call while
+## is_helping(); returns true on the frame the door opens.
+func help_step(speed: float, delta: float) -> bool:
+	var door: InteractableDoor = help_door
+	var center: Vector3 = door.get_center()
+	var flat := Vector3(center.x - global_position.x, 0.0, center.z - global_position.z)
+	if flat.length() > 1.25 or absf(center.y - global_position.y) > 1.2:
+		_help_timer = 0.0
+		nav_move_to(door.get_side_position(door.which_side(global_position), 0.75), speed, delta)
+		return false
+	ground_idle(delta)
+	face_point(center, delta, 8.0)
+	_help_timer += delta
+	if _help_timer >= door.get_handle_delay():
+		door.set_open(true)
+		help_door = null
+		return true
+	return false
+
+
+# ---------------------------------------------------------------------- taser
+
+## A moving robot hit by the taser locks up this long (x spray_factor).
+const TASER_STUN: float = 3.0
+
+
+## Knocked flat (POSE after a taser hit) and waiting for another robot to
+## reboot it. Not active, so it hunts nothing and hears nothing meanwhile.
+var is_down: bool = false
+
+
+## Juan's taser landed: it locks up for a moment. Returns true when it went
+## down completely (POSE overrides this).
+func take_taser() -> bool:
+	if not is_active:
+		return false
+	stun(TASER_STUN * spray_factor, &"taser")
+	blind(TASER_STUN * spray_factor)
+	EventBus.ui_notification.emit("%s jolts and locks up. Go - it won't last." % display_name, 2.5)
+	return false
+
+
+## Shuts down where it stands until reboot() (another robot fixes it).
+func knock_down() -> void:
 	if not is_active:
 		return
-	if not can_be_pried():
-		EventBus.ui_notification.emit("It moved. The screwdriver skids off the panel.", 2.5)
-		return
-	player.inventory.remove_item(ItemDB.SCREWDRIVER, 1)
-	is_disabled = true
-	SfxSynth.play_at(self, SfxSynth.latch_click(), get_eye_position() - Vector3.UP * 0.5, 0.0, 0.7)
 	deactivate()
-	EventBus.ui_notification.emit("The battery pops loose. %s goes limp. The screwdriver tip snapped." % display_name, 4.0)
+	is_down = true
+	add_to_group(&"downed_robots")
+
+
+## Brought back by another robot (CONCIERGE).
+func reboot() -> void:
+	if not is_down:
+		return
+	is_down = false
+	remove_from_group(&"downed_robots")
+	activate()
+	EventBus.robot_online.emit(display_name)
 
 
 # --------------------------------------------------------------------- senses
@@ -358,6 +449,31 @@ func nav_move_to(target: Vector3, speed: float, delta: float) -> bool:
 	move_and_slide()
 	_check_stuck(speed, delta)
 	return false
+
+
+func _guard_against_falling() -> void:
+	if _last_safe != Vector3.INF and global_position.y < _last_safe.y - FALL_RESCUE_DROP:
+		var map: RID = get_world_3d().navigation_map
+		global_position = NavigationServer3D.map_get_closest_point(map, _last_safe) + Vector3.UP * 0.05
+		velocity = Vector3.ZERO
+		return
+	if is_on_floor() and not body_shape.disabled:
+		_last_safe = global_position
+
+
+## Points its heading along the route to a new `goal` before it has moved.
+## find_blocking_door() judges "in the way" by that heading; left over from
+## the last trip, a robot that had been waiting at a closed door still
+## "faced" it, judged every new destination blocked and never set off.
+func aim_heading_at(goal: Vector3) -> void:
+	nav.target_position = _pick_map(goal)
+	_repath_timer = REPATH_INTERVAL
+	var next: Vector3 = nav.get_next_path_position()
+	var direction := Vector3(next.x - global_position.x, 0.0, next.z - global_position.z)
+	if direction.length() < 0.05:
+		direction = Vector3(goal.x - global_position.x, 0.0, goal.z - global_position.z)
+	if direction.length() > 0.05:
+		_desired_direction = direction.normalized()
 
 
 ## Barely moving while trying to: step sideways for a moment and re-path.

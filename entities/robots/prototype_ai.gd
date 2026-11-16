@@ -93,6 +93,10 @@ func kind() -> StringName:
 	return &"prototype"
 
 
+func can_open_doors() -> bool:
+	return true
+
+
 func get_feet_description() -> String:
 	return "Two metal feet, wires trailing between them. Something above them is sparking."
 

@@ -5,7 +5,7 @@ extends Node3D
 ##
 ## Story-critical items always appear in the rooms the design names (the gate
 ## key at the Cashier, fire extinguishers in the Kitchen and offices, the
-## screwdrivers in the MIT Office and Staff Room, and so on). Leftover markers then get a
+## tasers in the MIT Office and Staff Room, and so on). Leftover markers then get a
 ## chance at a common item so no two nights are stocked quite the same.
 
 ## Chance that a spare marker receives a random common item.
@@ -18,14 +18,14 @@ const GUARANTEED: Dictionary = {
 	2: [[ItemDB.BLACKOUT_KIT, 2], [ItemDB.WATER, 1]],
 	3: [[ItemDB.REHAS_KEY, 1]],
 	4: [[ItemDB.FIRE_EXTINGUISHER, 3], [ItemDB.WATER, 1]],
-	5: [[ItemDB.CROWBAR, 1], [ItemDB.SCREWDRIVER, 1], [ItemDB.ALCOHOL, 1], [ItemDB.GAUZE, 1], [ItemDB.CHAIR, 1]],
+	5: [[ItemDB.CROWBAR, 1], [ItemDB.TASER, 1], [ItemDB.ALCOHOL, 1], [ItemDB.GAUZE, 1], [ItemDB.CHAIR, 1]],
 	6: [[ItemDB.BLACKOUT_KIT, 1]],
 	7: [[ItemDB.LAN_CABLE, 2], [ItemDB.LAN_CABLE, 1]],
 	8: [[ItemDB.LAN_CABLE, 2], [ItemDB.CHAIR, 1]],
 	9: [[ItemDB.ALCOHOL, 1]],
 	10: [[ItemDB.GAUZE, 1]],
-	12: [[ItemDB.BOLT_CUTTERS, 1], [ItemDB.SCREWDRIVER, 1], [ItemDB.POWERBANK, 1], [ItemDB.LAN_CABLE, 1]],
-	13: [[ItemDB.LAN_CABLE, 2], [ItemDB.SCREWDRIVER, 1]],
+	12: [[ItemDB.BOLT_CUTTERS, 1], [ItemDB.TASER, 1], [ItemDB.POWERBANK, 1], [ItemDB.LAN_CABLE, 1]],
+	13: [[ItemDB.LAN_CABLE, 2], [ItemDB.TASER, 1]],
 	15: [[ItemDB.CHAIR, 1], [ItemDB.BLACKOUT_KIT, 1]],
 	17: [[ItemDB.CHAIR, 1]],
 	18: [[ItemDB.FIRE_EXTINGUISHER, 3], [ItemDB.BLACKOUT_KIT, 1], [ItemDB.GAUZE, 1], [ItemDB.WATER, 1]],

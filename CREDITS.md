@@ -83,7 +83,8 @@ mono and levelled for the game (res://audio/sfx).
   https://opengameart.org/content/100-cc0-metal-and-wood-sfx
   https://opengameart.org/content/75-cc0-breaking-falling-hit-sfx
   Used as: doors, latches, knocks, slams, metal clatter, keys, breaking glass,
-  thunder, the extinguisher burst and two of the footsteps.
+  thunder, the extinguisher burst, two of the footsteps, the rustle of black
+  card being taped up and the creak of a chair jammed under a handle.
 
 - **"Footsteps"** by GboxMikeFozzy
   https://opengameart.org/content/footsteps-0

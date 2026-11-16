@@ -100,7 +100,7 @@ func _wake_up_bang() -> void:
 	await get_tree().create_timer(0.35).timeout
 	SfxSynth.play_ui(self, SfxSynth.thud(), -4.0, 0.38)
 	await get_tree().create_timer(1.4).timeout
-	EventBus.ui_subtitle.emit("...What was that bang? It's dark. 11:45. At least my phone charged.", 6.0, &"Juan")
+	EventBus.ui_subtitle.emit("...What was that bang? It's dark. 11:45. And the charger's dead - phone's only on 35%.", 6.0, &"Juan")
 
 
 func _unhandled_input(event: InputEvent) -> void:

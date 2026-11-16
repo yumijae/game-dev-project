@@ -9,7 +9,9 @@ enum Footwear { SCHOOL_SHOES, SOCKS, BAREFOOT }
 enum PanicTier { GROUNDED, UNEASY, RATTLED, TERROR }
 
 const MAX_VALUE: float = 100.0
-const STARTING_BATTERY: float = 100.0
+## The charger in Room 402 died with the building's power at 11:44, long
+## before the phone was full.
+const STARTING_BATTERY: float = 35.0
 
 const HEAVY_BREATHING_THRESHOLD: float = 30.0
 const HEAVY_BREATHING_RADIUS: float = 4.0

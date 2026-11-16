@@ -29,12 +29,15 @@ static func build(item_id: StringName) -> Node3D:
 		var hose: MeshInstance3D = _cylinder(root, Vector3(-r - 0.008, size.y * 0.62, 0.0), 0.009, size.y * 0.5, Color(0.08, 0.08, 0.08), 0.8)
 		hose.rotation.z = 0.08
 		_cylinder(root, Vector3(-r - 0.02, size.y * 0.36, 0.0), 0.02, 0.07, Color(0.08, 0.08, 0.08), 0.7)
-	elif item_id == ItemDB.SCREWDRIVER:
-		var grip: MeshInstance3D = _cylinder(root, Vector3(-0.05, 0.013, 0.0), 0.013, 0.1, colour, 0.6)
-		grip.rotation.z = PI * 0.5
-		var shaft: MeshInstance3D = _cylinder(root, Vector3(0.05, 0.013, 0.0), 0.0035, 0.1, STEEL, 0.3, 0.9)
-		shaft.rotation.z = PI * 0.5
-		_box(root, Vector3(0.101, 0.013, 0.0), Vector3(0.006, 0.002, 0.007), STEEL, 0.3, 0.9)
+	elif item_id == ItemDB.TASER:
+		# A chunky yellow-and-black stun gun lying on its side: body, grip,
+		# the black nose and its two steel prongs.
+		var black := Color(0.07, 0.07, 0.08)
+		_box(root, Vector3(0.0, size.z * 0.5, 0.0), Vector3(size.x * 0.75, size.z, size.y), colour, 0.5)
+		_box(root, Vector3(-size.x * 0.32, size.z * 0.5, -0.03), Vector3(0.035, size.z * 0.9, 0.06), black, 0.8)
+		_box(root, Vector3(size.x * 0.44, size.z * 0.5, 0.0), Vector3(0.03, size.z * 0.85, size.y * 0.9), black, 0.6)
+		for side: float in [-1.0, 1.0]:
+			_box(root, Vector3(size.x * 0.5 + 0.008, size.z * 0.5, side * 0.011), Vector3(0.016, 0.004, 0.004), STEEL, 0.3, 0.9)
 	elif item_id == ItemDB.TRIPWIRE:
 		var coil := TorusMesh.new()
 		coil.outer_radius = 0.06

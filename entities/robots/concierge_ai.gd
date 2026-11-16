@@ -17,7 +17,7 @@ extends RobotBase
 ##     The face tells you its mood: smile (patrol), "?" (checking something),
 ##     "!" (chasing).
 
-enum State { DOCKED, PATROL, INVESTIGATE, CHASE, OFF }
+enum State { DOCKED, PATROL, INVESTIGATE, CHASE, OFF, REBOOT }
 
 const PATROL_SPEED: float = 1.3
 const INVESTIGATE_SPEED: float = 2.1
@@ -53,6 +53,16 @@ const LINES_LOST: Array[String] = [
 	"Please return to the exhibit area.",
 ]
 const LINE_DOOR := "Please open the door. I cannot reach the handle."
+const LINE_HELP := "I cannot reach the handle. Requesting assistance."
+const LINE_REBOOT_GO := "Unit %s is not responding. On my way."
+const LINE_REBOOT := "Rebooting unit %s. Please stand by."
+const LINE_REBOOT_DONE := "Reboot complete. Thank you for your patience."
+## Seconds at a downed robot's side before it is back up.
+const REBOOT_TIME: float = 6.0
+## A downed robot it could not get to is ignored for this long.
+const REBOOT_RETRY: float = 45.0
+## How long it waits at a door once another robot is on its way to open it.
+const HELP_WAIT: float = 30.0
 const LINE_HIT := "Thank you for your cooperation."
 const GLOW_ENERGY: float = 0.6
 ## Faces shown while its sensors are scrambled.
@@ -85,6 +95,15 @@ var _jolt: float = 0.0
 var _lunge: float = 0.0
 var _blink_timer: float = 3.0
 var _scramble_timer: float = 0.0
+## The robot coming to open the door it is stuck at.
+var _helper: RobotBase = null
+## Where _drive() was last asked to go (its heading is re-aimed on change).
+var _drive_goal: Vector3 = Vector3.INF
+## The downed robot it is going to reboot, how long it has worked on it, and
+## robots it could not reach (until when to leave them alone).
+var _patient: RobotBase = null
+var _reboot_timer: float = 0.0
+var _unreachable: Dictionary = {}
 
 
 func _init() -> void:
@@ -141,7 +160,10 @@ func _on_built() -> void:
 	_glow = OmniLight3D.new()
 	_glow.omni_range = 2.6
 	_glow.light_energy = GLOW_ENERGY
-	_glow.shadow_enabled = false
+	# Shadowed like every other light in the school (LightRig): without
+	# shadows its green glow shone through walls and floor slabs, and lit the
+	# fog on the far side of them.
+	LightRig.seal(_glow, 0.04)
 	_glow.position = SCREEN_CENTER + SCREEN_NORMAL * 0.25
 	model.add_child(_glow)
 	_motor = AudioStreamPlayer3D.new()
@@ -194,7 +216,17 @@ func _tick(delta: float) -> void:
 	_sense(delta)
 	if state != State.INVESTIGATE:
 		_look_timer = 0.0
+	if state == State.PATROL or state == State.INVESTIGATE:
+		var down: RobotBase = _robot_to_reboot()
+		if down != null:
+			_patient = down
+			_reboot_timer = 0.0
+			state = State.REBOOT
+			_set_face("question")
+			_say(LINE_REBOOT_GO % down.display_name)
 	match state:
+		State.REBOOT:
+			_tend_patient(delta)
 		State.PATROL:
 			if _talk_timer <= 0.0:
 				_talk_timer = randf_range(16.0, 26.0)
@@ -220,6 +252,52 @@ func _tick(delta: float) -> void:
 	var moving: float = clampf(Vector2(velocity.x, velocity.z).length() / CHASE_SPEED, 0.0, 1.0)
 	_motor.volume_db = lerpf(-26.0, -12.0, moving)
 	_motor.pitch_scale = lerpf(2.0, 2.8, moving)
+
+
+## A knocked-out robot on its own floor that it can drive to, or null.
+func _robot_to_reboot() -> RobotBase:
+	var now: float = Time.get_ticks_msec() / 1000.0
+	for node: Node in get_tree().get_nodes_in_group(&"downed_robots"):
+		var robot := node as RobotBase
+		if robot == null or not robot.is_down or float(_unreachable.get(robot, 0.0)) > now:
+			continue
+		if Campus.floor_from_y(robot.global_position.y + 0.5) != home_floor:
+			continue
+		if not _route_stays(robot.global_position):
+			continue
+		return robot
+	return null
+
+
+## Drives to the downed robot, plugs in and reboots it.
+func _tend_patient(delta: float) -> void:
+	if _patient == null or not is_instance_valid(_patient) or not _patient.is_down:
+		_patient = null
+		_look_around_then_patrol()
+		return
+	var at: Vector3 = _patient.global_position
+	var flat := Vector3(at.x - global_position.x, 0.0, at.z - global_position.z)
+	if flat.length() > 1.3:
+		_reboot_timer = 0.0
+		if _drive(at, INVESTIGATE_SPEED, delta) and flat.length() > 1.3:
+			# Gave up (a door nobody would open): leave it for a while.
+			_unreachable[_patient] = Time.get_ticks_msec() / 1000.0 + REBOOT_RETRY
+			_patient = null
+			_look_around_then_patrol()
+		return
+	ground_idle(delta)
+	face_point(at, delta, 4.0)
+	if _reboot_timer == 0.0:
+		_set_face("smile")
+		_say(LINE_REBOOT % _patient.display_name)
+		SfxSynth.play_at(self, SfxSynth.ups_beep(), get_eye_position(), -12.0, 0.8, 14.0)
+	_reboot_timer += delta
+	if _reboot_timer >= REBOOT_TIME:
+		SfxSynth.play_at(self, SfxSynth.ups_beep(), get_eye_position(), -10.0, 1.2, 14.0)
+		_patient.reboot()
+		_patient = null
+		_say(LINE_REBOOT_DONE)
+		_look_around_then_patrol()
 
 
 func _sense(delta: float) -> void:
@@ -298,19 +376,26 @@ func _on_heard(origin: Vector3, _noise_type: StringName, audibility: float) -> v
 ## Drives towards `goal` on its own floor. Waits at closed doors, asks, then
 ## gives up on that goal. Returns true on arrival or when giving up.
 func _drive(goal: Vector3, speed: float, delta: float) -> bool:
+	if goal.distance_to(_drive_goal) > 0.5:
+		_drive_goal = goal
+		aim_heading_at(goal)
 	var door: InteractableDoor = find_blocking_door()
 	if door != null:
 		_door_timer += delta
 		ground_idle(delta)
 		face_point(door.get_center(), delta, 4.0)
 		if _door_timer > 0.6 and _door_timer - delta <= 0.6:
-			_say(LINE_DOOR)
-		if _door_timer >= DOOR_WAIT:
+			_helper = RobotBase.call_for_help(door, self)
+			_say(LINE_HELP if _helper != null else LINE_DOOR)
+		var helped: bool = _helper != null and is_instance_valid(_helper) and _helper.help_door == door and _helper.is_helping()
+		if _door_timer >= (HELP_WAIT if helped else DOOR_WAIT):
 			_door_timer = 0.0
+			_helper = null
 			_avoid_door(door)
 			return true
 		return false
 	_door_timer = 0.0
+	_helper = null
 	if stuck_count >= 3:
 		stuck_count = 0
 		return true

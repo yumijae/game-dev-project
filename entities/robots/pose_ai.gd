@@ -66,9 +66,18 @@ func kind() -> StringName:
 	return &"pose"
 
 
-## Frozen under Juan's gaze is as good as stunned.
-func can_be_pried() -> bool:
-	return is_active and (is_observed or stun_time_left > 0.0)
+func can_open_doors() -> bool:
+	return true
+
+
+## A taser drops it completely: the servos let go and it stays down until
+## CONCIERGE comes and reboots it.
+func take_taser() -> bool:
+	if not is_active:
+		return false
+	knock_down()
+	EventBus.ui_notification.emit("POSE drops like a puppet with its strings cut. It isn't moving... for now.", 4.0)
+	return true
 
 
 func get_feet_description() -> String:
@@ -85,6 +94,9 @@ func _on_built() -> void:
 func _on_activated() -> void:
 	state = State.ROAM
 	_pick_roam_target()
+	# Rebooted where it lay (after a taser): it straightens up, servos whining.
+	_set_pose("stride")
+	SfxSynth.play_at(self, SfxSynth.servo(), get_eye_position(), -8.0, 0.8, 18.0)
 
 
 func _on_shutdown() -> void:
@@ -125,6 +137,13 @@ func _tick(delta: float) -> void:
 	_retreat_timer = maxf(_retreat_timer - delta, 0.0)
 	_hunch_timer -= delta
 	_think(delta)
+	# Answering another robot's call: off to open its door (unless it has
+	# Juan in sight - he comes first).
+	if state != State.HUNT and is_helping():
+		help_step(SEARCH_SPEED * 1.4 * get_speed_factor(), delta)
+		face_direction(_desired_direction, delta, 0.0)
+		_footsteps(delta)
+		return
 	if _handle_door(delta):
 		return
 	var speed: float = (SEARCH_SPEED if state == State.ROAM else SPEED) * get_speed_factor()
