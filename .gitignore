@@ -4,3 +4,7 @@
 
 # Dev-only editor plugins (not needed by testers)
 /addons/godot_ai/
+/_backup_*/
+/tools/
+/Voice_Recording/
+/preview.tscn
