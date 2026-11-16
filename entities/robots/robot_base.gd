@@ -47,6 +47,13 @@ var last_known: Vector3 = Vector3.INF
 var last_known_age: float = INF
 ## The dock it charges on; where it stands before midnight.
 var home: Transform3D = Transform3D.IDENTITY
+## When it last had Juan in sight (ms): hiding in front of it fools nobody.
+var _last_saw_ms: int = -1000000
+const SAW_RECENTLY_MS: int = 1500
+## A noise from inside a hiding spot this close gives the spot away.
+const HIDING_GIVEAWAY_RANGE: float = 4.5
+## It knows which spot he is in: close enough, cover no longer hides him.
+const FOUND_SPOT_RANGE: float = 3.2
 
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var _repath_timer: float = 0.0
@@ -191,6 +198,11 @@ func _on_shutdown() -> void:
 	pass
 
 
+## Juan's hiding spot is known: go and get him.
+func _on_found_hidden(_at: Vector3) -> void:
+	pass
+
+
 func _tick(_delta: float) -> void:
 	pass
 
@@ -254,11 +266,32 @@ func get_player_distance() -> float:
 ## Range (scaled by how visible Juan makes himself) and a clear sight line.
 ## `fov` <= 0 means it sees all around (a head that turns without warning).
 func can_see_player(fov: float = 0.0) -> bool:
+	var seen: bool = _sight_test(fov)
+	if seen:
+		_last_saw_ms = Time.get_ticks_msec()
+	return seen
+
+
+func saw_player_recently() -> bool:
+	return Time.get_ticks_msec() - _last_saw_ms <= SAW_RECENTLY_MS
+
+
+## It has worked out which hiding spot Juan is in (PlayerController.expose_hiding).
+func on_found_hidden(at: Vector3) -> void:
+	remember(at)
+	_on_found_hidden(at)
+
+
+func _sight_test(fov: float) -> bool:
 	if player == null or player.is_dead or player.is_concealed() or is_blind():
 		return false
 	var eye: Vector3 = get_eye_position()
 	var head: Vector3 = player.get_head_position()
 	var to_head: Vector3 = head - eye
+	# A locker door or a desk front between them no longer matters.
+	if player.is_hidden and player.is_hide_exposed and absf(to_head.y) < 2.0 \
+			and Vector2(to_head.x, to_head.z).length() < FOUND_SPOT_RANGE:
+		return true
 	if to_head.length() > vision_range * player.get_visibility_factor():
 		return false
 	if fov > 0.0 and to_head.length() > 2.0:
@@ -271,12 +304,21 @@ func can_see_player(fov: float = 0.0) -> bool:
 
 
 func _on_noise_emitted(origin: Vector3, radius: float, noise_type: StringName, source: Node) -> void:
-	if not is_threatening() or source is Hostile or origin.distance_to(global_position) < SELF_NOISE_RADIUS:
+	if not is_threatening() or source is Hostile:
+		return
+	# Ignore the racket it makes itself (a door it just opened) - but never
+	# Juan: that also deafened every robot to a gasp or a step right beside it.
+	if not (source is PlayerController) and origin.distance_to(global_position) < SELF_NOISE_RADIUS:
 		return
 	var ears: Vector3 = get_eye_position()
 	if NoiseManager.can_hear(ears, origin, radius, hearing):
 		if source is PlayerController or source is ThrownBottle or source is TripwireAlarm:
 			remember(origin)
+		var juan := source as PlayerController
+		if juan != null and juan.is_hidden and absf(origin.y - global_position.y) < 2.0 \
+				and origin.distance_to(global_position) <= HIDING_GIVEAWAY_RANGE:
+			# A gasp or panting from inside the locker it is standing next to.
+			juan.expose_hiding(self)
 		_on_heard(origin, noise_type, NoiseManager.get_audibility(ears, origin, radius, hearing))
 
 
@@ -413,7 +455,8 @@ func face_point(point: Vector3, delta: float, turn_speed: float = 9.0) -> void:
 func find_blocking_door(reach: float = 1.4) -> InteractableDoor:
 	for node: Node in get_tree().get_nodes_in_group(&"doors"):
 		var door := node as InteractableDoor
-		if door == null or door.is_passable():
+		# Chained fire exits lead nowhere the navmesh goes: never "in the way".
+		if door == null or door.is_passable() or door.permanently_locked:
 			continue
 		var center: Vector3 = door.get_center()
 		if absf(center.y - global_position.y) > 1.2:
@@ -431,6 +474,19 @@ func find_blocking_door(reach: float = 1.4) -> InteractableDoor:
 			continue
 		return door
 	return null
+
+
+## Call when giving up on a closed door. Turns its heading away from the
+## doorway, so find_blocking_door() stops reporting that door and the robot
+## can walk off to its new target. (The heading only updates while moving;
+## left pointing at the door, the robot stood there waiting on it forever.)
+func turn_from_door(door: InteractableDoor) -> void:
+	var away: Vector3 = global_position - door.get_center()
+	away.y = 0.0
+	if away.length() < 0.05:
+		away = door.room_side * door.which_side(global_position)
+	_desired_direction = away.normalized()
+	_repath_timer = 0.0
 
 
 ## Strikes Juan if he is within reach. Returns true when a blow landed.

@@ -25,6 +25,9 @@ const HAZARD_DEPTH: float = 1.8
 @export var room_side: Vector3 = Vector3.BACK
 
 var is_shattered: bool = false
+## Black card taped over the whole bay: nothing sees through it, either way.
+var is_blacked_out: bool = false
+const TAPE_TIME: float = 4.0
 
 static var _pane_material: StandardMaterial3D = null
 static var _frame_material: StandardMaterial3D = null
@@ -106,7 +109,52 @@ func get_sill_y() -> float:
 
 ## The glass is clear, so flashlight beams pass into the corridor.
 func leaks_light() -> bool:
-	return not is_shattered
+	return not is_shattered and not is_blacked_out
+
+
+# The robots look straight through these bays from the corridor. A sheet of
+# black card (ItemDB.BLACKOUT_KIT) takes that away: the pane joins the solid
+# world layer, which is what every sight line is tested against.
+
+func get_interactions(player: PlayerController) -> Array[Dictionary]:
+	var actions: Array[Dictionary] = []
+	if is_shattered:
+		return actions
+	if is_blacked_out:
+		actions.append({"id": &"untape", "label": "Tear the black card off the glass"})
+	elif player.inventory.has_item(ItemDB.BLACKOUT_KIT):
+		actions.append({"id": &"tape", "label": "Tape black card over the glass (4 s) - nothing sees through"})
+	return actions
+
+
+func interact(player: PlayerController, action_id: StringName) -> void:
+	match action_id:
+		&"tape":
+			player.start_channel("Taping black card over the glass", TAPE_TIME, _finish_tape.bind(player))
+		&"untape":
+			_set_blacked_out(false)
+
+
+func _finish_tape(player: PlayerController) -> void:
+	if is_shattered or is_blacked_out or not player.inventory.remove_item(ItemDB.BLACKOUT_KIT, 1):
+		return
+	_set_blacked_out(true)
+	EventBus.ui_notification.emit("Blacked out. Nothing in the corridor can see in through this glass.", 3.0)
+
+
+func _set_blacked_out(enabled: bool) -> void:
+	is_blacked_out = enabled
+	collision_layer = LAYER_GLASS | (1 if enabled else 0)
+	var pane := get_node_or_null("Pane") as MeshInstance3D
+	if pane == null:
+		return
+	if not enabled:
+		pane.material_override = null
+		return
+	var card := StandardMaterial3D.new()
+	card.albedo_color = Color(0.03, 0.03, 0.035)
+	card.roughness = 0.95
+	pane.material_override = card
 
 
 ## +1.0 if `pos` is on the lab side of the pane, -1.0 on the corridor side.

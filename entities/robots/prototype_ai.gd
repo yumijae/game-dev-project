@@ -42,7 +42,12 @@ const HEAD: int = 6
 
 var state: State = State.DORMANT
 
+## Seconds between its vague ideas of where Juan is (the others wait 75 s;
+## it is alone in the building by then, so it gets them more often).
+const PROTOTYPE_HUNCH_INTERVAL: float = 30.0
+
 var _woken: bool = false
+var _hunch_timer: float = 0.0
 var _target: Vector3 = Vector3.ZERO
 var _listen_timer: float = 0.0
 var _quiet_timer: float = 0.0
@@ -186,6 +191,7 @@ func _on_attack_landed(fatal: bool) -> void:
 
 func _tick(delta: float) -> void:
 	_retreat_timer = maxf(_retreat_timer - delta, 0.0)
+	_hunch_timer -= delta
 	_quiet_timer += delta
 	_ambient(delta)
 	if _retreat_timer <= 0.0 and can_see_player():
@@ -198,10 +204,18 @@ func _tick(delta: float) -> void:
 			_gait(0.0, delta)
 			_listen_timer -= delta
 			if _listen_timer <= 0.0:
-				# Nothing heard: wander a stretch of the way towards Juan.
+				# Nothing heard: follow its last lead; with none, search where
+				# it is, and only now and then drift a stretch towards Juan.
+				# (It used to take a fresh bearing on him every few seconds,
+				# which was live tracking in all but name: silence never lost it.)
 				state = State.STALK
-				var lead: Vector3 = last_known if knows_where() else hunch(12.0)
-				_target = random_nav_point(point_along_route(lead, SEARCH_HOP), 3.0)
+				if knows_where():
+					_target = random_nav_point(point_along_route(last_known, SEARCH_HOP), 3.0)
+				elif _hunch_timer <= 0.0:
+					_hunch_timer = PROTOTYPE_HUNCH_INTERVAL
+					_target = random_nav_point(point_along_route(hunch(12.0), SEARCH_HOP), 3.0)
+				else:
+					_target = random_nav_point(global_position, SEARCH_HOP)
 		State.STALK:
 			_move(WALK_SPEED, delta)
 		State.HUNT:
@@ -228,6 +242,13 @@ func _move(speed: float, delta: float) -> void:
 func _stop_and_listen() -> void:
 	state = State.LISTEN
 	_listen_timer = randf_range(LISTEN_TIME.x, LISTEN_TIME.y)
+
+
+func _on_found_hidden(at: Vector3) -> void:
+	if not _woken or state == State.OFF or _retreat_timer > 0.0:
+		return
+	state = State.HUNT
+	_target = at
 
 
 func _on_heard(origin: Vector3, _noise_type: StringName, audibility: float) -> void:
@@ -262,11 +283,6 @@ func _handle_door(delta: float) -> bool:
 		if _door_timer >= door.get_handle_delay():
 			door.set_open(true)
 			_door_timer = 0.0
-		return true
-	if door.permanently_locked:
-		if _door_timer > 2.0:
-			_door_timer = 0.0
-			_stop_and_listen()
 		return true
 	if _door_timer >= SHOVE_INTERVAL:
 		_door_timer = 0.0

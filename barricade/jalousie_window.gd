@@ -213,14 +213,12 @@ func is_breached() -> bool:
 
 # --------------------------------------------------------------- interactions
 
-func get_interactions(player: PlayerController) -> Array[Dictionary]:
+func get_interactions(_player: PlayerController) -> Array[Dictionary]:
 	var actions: Array[Dictionary] = []
 	match state:
 		State.CLOSED:
 			actions.append({"id": &"open_left", "label": "Slide the left pane open"})
 			actions.append({"id": &"open_right", "label": "Slide the right pane open"})
-			if player.inventory.has_item(ItemDB.BLACKOUT_KIT):
-				actions.append({"id": &"tape", "label": "Tape black card over the glass (4 s)"})
 		State.OPEN:
 			actions.append({"id": &"close", "label": "Slide the window shut"})
 		State.TAPED_BLACKOUT:

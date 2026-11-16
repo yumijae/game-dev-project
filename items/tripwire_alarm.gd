@@ -62,7 +62,9 @@ func get_interactions(_player: PlayerController) -> Array[Dictionary]:
 
 
 func interact(player: PlayerController, _action_id: StringName) -> void:
-	player.inventory.add_item(ItemDB.TRIPWIRE, 1)
+	if player.inventory.add_item(ItemDB.TRIPWIRE, 1) > 0:
+		EventBus.ui_notification.emit("No room. Drop something first.", 2.0)
+		return
 	queue_free()
 
 
@@ -82,4 +84,5 @@ func _trip() -> void:
 	NoiseManager.emit_noise(global_position, CRASH_NOISE, &"glass_shatter", self)
 	SfxSynth.play_at(self, SfxSynth.glass_shatter(), global_position + Vector3.UP * 0.1, 8.0, 0.95, 60.0)
 	EventBus.ui_notification.emit("Glass shatters somewhere. Your tripwire.", 3.0)
+	BrokenGlassHazard.spawn(get_tree().current_scene, global_position, Vector2(0.9, 0.9))
 	queue_free()

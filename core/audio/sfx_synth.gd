@@ -1,12 +1,54 @@
 class_name SfxSynth
 extends RefCounted
-## Procedural sound effects. The project ships no audio files, so every cue is
-## synthesised once into an AudioStreamWAV and cached. Swap any of these for a
-## recorded sample later by replacing the matching function's return value.
+## Sound effects. The cues people hear most (footsteps, doors, glass, metal,
+## rain, thunder) are CC0 recordings in res://audio/sfx (see CREDITS.md), a few
+## takes of each so they do not repeat. Everything else, and any cue whose
+## files are missing, is synthesised once into an AudioStreamWAV and cached.
 
 const MIX_RATE: int = 22050
+const SAMPLE_DIR: String = "res://audio/sfx/"
+## Recorded cue -> number of takes (files are <cue>_01.ogg, <cue>_02.ogg ...).
+const SAMPLES: Dictionary = {
+	&"shoe_step": 8, &"glass_shatter": 6, &"glass_crunch": 3, &"thud": 5, &"knock": 2,
+	&"latch_click": 4, &"clatter": 4, &"keys_jingle": 3, &"door_open": 2, &"door_close": 5,
+	&"thunder": 1, &"spray": 1, &"rain": 1,
+}
+const LOOPED_SAMPLES: Array[StringName] = [&"rain"]
 
 static var _cache: Dictionary = {}
+static var _samples: Dictionary = {}
+static var _last_take: Dictionary = {}
+
+
+## A random take of a recorded cue (never the same one twice running), or
+## null when it has no recordings.
+static func _sample(cue: StringName) -> AudioStream:
+	var takes: int = SAMPLES.get(cue, 0)
+	if takes <= 0:
+		return null
+	var take: int = randi() % takes
+	if takes > 1 and take == int(_last_take.get(cue, -1)):
+		take = (take + 1) % takes
+	_last_take[cue] = take
+	var path: String = "%s%s_%02d.ogg" % [SAMPLE_DIR, cue, take + 1]
+	if not _samples.has(path):
+		var stream: AudioStream = load(path) as AudioStream if ResourceLoader.exists(path) else null
+		if stream is AudioStreamOggVorbis:
+			(stream as AudioStreamOggVorbis).loop = LOOPED_SAMPLES.has(cue)
+		_samples[path] = stream
+	return _samples[path]
+
+
+## A door handle turning and the leaf coming off its latch.
+static func door_open() -> AudioStream:
+	var recorded: AudioStream = _sample(&"door_open")
+	return recorded if recorded != null else latch_click()
+
+
+## A door pushed shut onto its latch.
+static func door_close() -> AudioStream:
+	var recorded: AudioStream = _sample(&"door_close")
+	return recorded if recorded != null else knock()
 
 
 ## A dry, bright tick: UI clicks and SCUTTLE's legs.
@@ -32,7 +74,10 @@ static func ups_beep() -> AudioStreamWAV:
 
 
 ## Knuckles on a wooden door.
-static func knock() -> AudioStreamWAV:
+static func knock() -> AudioStream:
+	var recorded: AudioStream = _sample(&"knock")
+	if recorded != null:
+		return recorded
 	return _cached(&"knock", func() -> PackedFloat32Array:
 		var samples: PackedFloat32Array = _silence(0.16)
 		for i: int in samples.size():
@@ -42,7 +87,10 @@ static func knock() -> AudioStreamWAV:
 
 
 ## A heavy body slamming a door or a prop landing.
-static func thud() -> AudioStreamWAV:
+static func thud() -> AudioStream:
+	var recorded: AudioStream = _sample(&"thud")
+	if recorded != null:
+		return recorded
 	return _cached(&"thud", func() -> PackedFloat32Array:
 		var samples: PackedFloat32Array = _silence(0.4)
 		var low: float = 0.0
@@ -53,7 +101,10 @@ static func thud() -> AudioStreamWAV:
 		return samples)
 
 
-static func glass_shatter() -> AudioStreamWAV:
+static func glass_shatter() -> AudioStream:
+	var recorded: AudioStream = _sample(&"glass_shatter")
+	if recorded != null:
+		return recorded
 	return _cached(&"glass", func() -> PackedFloat32Array:
 		var samples: PackedFloat32Array = _silence(0.9)
 		var previous: float = 0.0
@@ -68,7 +119,10 @@ static func glass_shatter() -> AudioStreamWAV:
 
 
 ## Crunch of glass shards underfoot.
-static func glass_crunch() -> AudioStreamWAV:
+static func glass_crunch() -> AudioStream:
+	var recorded: AudioStream = _sample(&"glass_crunch")
+	if recorded != null:
+		return recorded
 	return _cached(&"crunch", func() -> PackedFloat32Array:
 		var samples: PackedFloat32Array = _silence(0.22)
 		var previous: float = 0.0
@@ -139,7 +193,10 @@ static func window_slide() -> AudioStreamWAV:
 
 
 ## The crescent sash lock snapping over: a small bright metallic click.
-static func latch_click() -> AudioStreamWAV:
+static func latch_click() -> AudioStream:
+	var recorded: AudioStream = _sample(&"latch_click")
+	if recorded != null:
+		return recorded
 	return _cached(&"latch_click", func() -> PackedFloat32Array:
 		var samples: PackedFloat32Array = _silence(0.09)
 		for i: int in samples.size():
@@ -150,7 +207,10 @@ static func latch_click() -> AudioStreamWAV:
 
 
 ## Something metal dropped on tiles (fumbled item, jingling keys).
-static func clatter() -> AudioStreamWAV:
+static func clatter() -> AudioStream:
+	var recorded: AudioStream = _sample(&"clatter")
+	if recorded != null:
+		return recorded
 	return _cached(&"clatter", func() -> PackedFloat32Array:
 		var samples: PackedFloat32Array = _silence(0.5)
 		for i: int in samples.size():
@@ -160,7 +220,10 @@ static func clatter() -> AudioStreamWAV:
 		return samples)
 
 
-static func keys_jingle() -> AudioStreamWAV:
+static func keys_jingle() -> AudioStream:
+	var recorded: AudioStream = _sample(&"keys_jingle")
+	if recorded != null:
+		return recorded
 	return _cached(&"keys", func() -> PackedFloat32Array:
 		var samples: PackedFloat32Array = _silence(0.7)
 		for i: int in samples.size():
@@ -193,7 +256,7 @@ static func phone_buzz() -> AudioStreamWAV:
 
 
 ## A single footfall (the hallucinated step behind Juan): a real shoe step.
-static func footstep() -> AudioStreamWAV:
+static func footstep() -> AudioStream:
 	return shoe_step()
 
 
@@ -210,7 +273,10 @@ static func gasp() -> AudioStreamWAV:
 
 
 ## A long roll of thunder: a sharp crack, then the rumble dying away.
-static func thunder() -> AudioStreamWAV:
+static func thunder() -> AudioStream:
+	var recorded: AudioStream = _sample(&"thunder")
+	if recorded != null:
+		return recorded
 	return _cached(&"thunder", func() -> PackedFloat32Array:
 		var samples: PackedFloat32Array = _silence(4.5)
 		var low: float = 0.0
@@ -227,7 +293,10 @@ static func thunder() -> AudioStreamWAV:
 
 ## Steady rain on the roof and the jalousie glass (two-second loop): a dark,
 ## soft wash with a patter of separate drops on top - not a hiss.
-static func rain() -> AudioStreamWAV:
+static func rain() -> AudioStream:
+	var recorded: AudioStream = _sample(&"rain")
+	if recorded != null:
+		return recorded
 	return _cached(&"rain", func() -> PackedFloat32Array:
 		var samples: PackedFloat32Array = _silence(2.0)
 		var low: float = 0.0
@@ -255,7 +324,10 @@ static func rain() -> AudioStreamWAV:
 
 
 ## A CO2 extinguisher burst: a hard hiss that starts with a pop and tails off.
-static func spray() -> AudioStreamWAV:
+static func spray() -> AudioStream:
+	var recorded: AudioStream = _sample(&"spray")
+	if recorded != null:
+		return recorded
 	return _cached(&"spray", func() -> PackedFloat32Array:
 		var length: float = 0.9
 		var samples: PackedFloat32Array = _silence(length)
@@ -286,7 +358,10 @@ static func drone() -> AudioStreamWAV:
 
 ## One of four rubber-soled steps on terrazzo: a soft heel strike, then the
 ## toe a beat later, with a touch of grit. Variants stop the machine-gun effect.
-static func shoe_step(variant: int = -1) -> AudioStreamWAV:
+static func shoe_step(variant: int = -1) -> AudioStream:
+	var recorded: AudioStream = _sample(&"shoe_step")
+	if recorded != null:
+		return recorded
 	var v: int = (randi() if variant < 0 else variant) % 4
 	return _cached(StringName("shoe_%d" % v), func() -> PackedFloat32Array:
 		var samples: PackedFloat32Array = _silence(0.2)

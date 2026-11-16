@@ -41,7 +41,7 @@ const ITEMS: Dictionary = {
 	LAN_CABLE: {"name": "LAN Cable", "stack": 3, "color": Color(0.15, 0.35, 0.8), "size": Vector3(0.16, 0.05, 0.16),
 		"desc": "Cat6 from the computer labs. Ties a door handle shut."},
 	BLACKOUT_KIT: {"name": "Tape & Black Card", "stack": 3, "color": Color(0.08, 0.08, 0.1), "size": Vector3(0.22, 0.03, 0.3),
-		"desc": "Black card paper and packing tape. Blacks out one window."},
+		"desc": "Black card paper and packing tape. Tape it over a lab's corridor glass and nothing out there can see in."},
 	CHAIR: {"name": "Plastic Chair", "stack": 1, "color": Color(0.92, 0.92, 0.9), "size": Vector3(0.45, 0.8, 0.45),
 		"hands_only": true, "desc": "Too big for the backpack. Wedge it under a door handle."},
 	REHAS_KEY: {"name": "Master Gate Key", "stack": 1, "color": Color(0.85, 0.7, 0.2), "size": Vector3(0.08, 0.015, 0.03),

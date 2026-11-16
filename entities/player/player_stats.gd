@@ -24,12 +24,16 @@ const PANIC_THRESHOLDS: Array[int] = [30, 35, 60, 70, 80, 85, 95]
 const TIER_LIMITS: Array[float] = [30.0, 60.0, 85.0]
 const TIER_NAMES: Array[String] = ["Grounded", "Uneasy", "Rattled", "Terror"]
 
-const PANIC_DARKNESS_RATE: float = 0.3
+## Pitch dark is most of the building: at 0.3 a player sneaking with the
+## light off hit shaky hands in four minutes and gasping in five, with no way
+## back short of turning the light on. Now about ten minutes to 70.
+const PANIC_DARKNESS_RATE: float = 0.12
+## Shut in a hiding spot with nothing close: the breathing slows.
+const PANIC_HIDING_RECOVERY: float = 0.5
 const PANIC_BLEEDING_RATE: float = 0.4
 const PANIC_THREAT_RATE: float = 7.0
 const PANIC_THREAT_RADIUS: float = 9.0
 const PANIC_RECOVERY_RATE: float = 0.8
-const PANIC_CANDLE_RELIEF: float = 3.0
 const PANIC_MIRROR_SPIKE: float = 15.0
 const MIRROR_COOLDOWN: float = 10.0
 
@@ -161,13 +165,17 @@ func roll_fumble() -> bool:
 
 func _update_panic(delta: float) -> void:
 	var rate: float = 0.0
-	if in_darkness:
+	# Hidden, the dark is cover, not a threat.
+	if in_darkness and not is_hidden:
 		rate += PANIC_DARKNESS_RATE
 	if is_bleeding:
 		rate += PANIC_BLEEDING_RATE
-	rate += _get_threat_pressure() * PANIC_THREAT_RATE
+	var threat: float = _get_threat_pressure()
+	rate += threat * PANIC_THREAT_RATE
 	if rate <= 0.0:
 		rate = -PANIC_RECOVERY_RATE
+	elif is_hidden and threat <= 0.0:
+		rate -= PANIC_HIDING_RECOVERY
 	if rate != 0.0:
 		_set_panic(panic + rate * delta)
 

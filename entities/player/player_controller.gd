@@ -67,6 +67,9 @@ var is_hidden: bool:
 
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var _hiding_spot: HidingSpot = null
+## A robot knows which spot Juan is in (it watched him climb in, or heard him
+## from right beside it). Hiding there protects nothing until he moves.
+var is_hide_exposed: bool = false
 var _focused: Node = null
 var _actions: Array[Dictionary] = []
 var _selected_action: int = 0
@@ -541,12 +544,34 @@ func get_hiding_spot() -> Node3D:
 func enter_hiding(spot: HidingSpot) -> void:
 	if is_busy():
 		return
+	# Anything that had eyes on him a moment ago saw where he went.
+	var watcher: RobotBase = null
+	for node: Node in get_tree().get_nodes_in_group(&"hostile_presence"):
+		var robot := node as RobotBase
+		if robot != null and robot.is_threatening() and robot.saw_player_recently():
+			watcher = robot
+			break
 	_hiding_spot = spot
 	spot.occupant = self
+	is_hide_exposed = false
 	velocity = Vector3.ZERO
 	global_position = spot.get_hide_position()
 	EventBus.player_hidden_changed.emit(true, spot)
 	_refresh_focus(true)
+	if watcher != null:
+		expose_hiding(watcher)
+
+
+## A robot has worked out which hiding spot Juan is in: it can see and reach
+## him there until he gets out and finds another.
+func expose_hiding(by: RobotBase = null) -> void:
+	if not is_hidden or is_hide_exposed:
+		return
+	is_hide_exposed = true
+	stats.add_panic(12.0)
+	EventBus.ui_notification.emit("It knows you are in here. Get out!", 3.5)
+	if by != null:
+		by.on_found_hidden(global_position)
 
 
 func exit_hiding() -> void:
@@ -554,6 +579,7 @@ func exit_hiding() -> void:
 		return
 	var spot: HidingSpot = _hiding_spot
 	_hiding_spot = null
+	is_hide_exposed = false
 	spot.occupant = null
 	global_position = _safe_exit_position(spot)
 	velocity = Vector3.ZERO
@@ -835,9 +861,10 @@ func get_visibility_factor() -> float:
 	return 1.0
 
 
-## Hidden from sight: inside a hiding spot with the flashlight off.
+## Hidden from sight: inside a hiding spot with the flashlight off, and no
+## robot knows he is in it.
 func is_concealed() -> bool:
-	return is_hidden and not phone.is_flashlight_on
+	return is_hidden and not phone.is_flashlight_on and not is_hide_exposed
 
 
 # --------------------------------------------------------------------- damage

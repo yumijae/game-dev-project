@@ -17,7 +17,7 @@ extends Node
 
 const MONOLOGUE: Dictionary = {
 	PlayerStats.PanicTier.GROUNDED: [
-		"Okay. I just fell asleep in 402. I only have to find the night guard.",
+		"Okay. I just fell asleep in 402. The guard opens up at six. I only have to last till then.",
 		"Breathe. One thing at a time. I know this building.",
 		"I should have been home hours ago. Thesis, thesis, always the thesis.",
 		"Morning is a long way off. But I can do this.",

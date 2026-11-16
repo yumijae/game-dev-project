@@ -70,3 +70,25 @@
 ## Textures
 
 - PBR textures from **Poly Haven** (https://polyhaven.com), CC0.
+
+## Sound effects
+
+All from OpenGameArt, all CC0 (public domain). Each was trimmed, converted to
+mono and levelled for the game (res://audio/sfx).
+
+- **"100 CC0 SFX"**, **"100 CC0 SFX #2"**, **"100 CC0 metal and wood SFX"** and
+  **"75 CC0 breaking / falling / hit sfx"** by rubberduck
+  https://opengameart.org/content/100-cc0-sfx
+  https://opengameart.org/content/100-cc0-sfx-2
+  https://opengameart.org/content/100-cc0-metal-and-wood-sfx
+  https://opengameart.org/content/75-cc0-breaking-falling-hit-sfx
+  Used as: doors, latches, knocks, slams, metal clatter, keys, breaking glass,
+  thunder, the extinguisher burst and two of the footsteps.
+
+- **"Footsteps"** by GboxMikeFozzy
+  https://opengameart.org/content/footsteps-0
+  Used as: Juan's footsteps.
+
+- **"Rain (loopable)"** by Ylmir
+  https://opengameart.org/content/rain-loopable
+  Used as: the rain outside.

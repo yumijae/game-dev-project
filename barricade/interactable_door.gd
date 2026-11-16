@@ -238,6 +238,14 @@ func set_open(open: bool) -> void:
 		return
 	is_open = open
 	_swing(open_yaw if open else closed_yaw, SWING_TIME)
+	var handle: Vector3 = get_center() + Vector3.UP * 1.0
+	if open:
+		SfxSynth.play_at(self, SfxSynth.door_open(), handle, -9.0, randf_range(0.92, 1.06), 22.0)
+	else:
+		# The latch catches as the leaf arrives, not when the swing starts.
+		get_tree().create_timer(SWING_TIME * 0.85).timeout.connect(func() -> void:
+			if is_inside_tree() and not is_open:
+				SfxSynth.play_at(self, SfxSynth.door_close(), handle, -7.0, randf_range(0.92, 1.06), 26.0))
 	NoiseManager.emit_noise(get_center(), NOISE_OPEN if open else NOISE_CLOSE, &"door_swing", self)
 	EventBus.door_state_changed.emit(self)
 

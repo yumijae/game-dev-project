@@ -158,6 +158,15 @@ func _sense(delta: float) -> void:
 			_target = last_known if knows_where() else global_position
 
 
+func _on_found_hidden(at: Vector3) -> void:
+	if state == State.OFF or state == State.DOCKED or _retreat_timer > 0.0:
+		return
+	state = State.CHASE
+	_target = at
+	_lose_timer = LOSE_TIME
+	_pause_timer = 0.0
+
+
 func _on_heard(origin: Vector3, _noise_type: StringName, audibility: float) -> void:
 	if state == State.CHASE or state == State.OFF or state == State.DOCKED or audibility < 0.1:
 		return
@@ -200,6 +209,7 @@ func _handle_door(delta: float) -> bool:
 	if _door_timer >= 2.5:
 		_door_timer = 0.0
 		var side: float = door.which_side(global_position)
+		turn_from_door(door)
 		_target = random_nav_point(door.get_side_position(side, 4.0), 3.0)
 		state = State.ROAM
 		_roam_timer = 8.0

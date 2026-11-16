@@ -191,6 +191,12 @@ func _pick_roam_target() -> void:
 		_target = random_nav_point(global_position, ROAM_RADIUS)
 
 
+func _on_found_hidden(at: Vector3) -> void:
+	if state != State.OFF and _retreat_timer <= 0.0:
+		state = State.HUNT
+		_target = at
+
+
 func _on_heard(origin: Vector3, _noise_type: StringName, audibility: float) -> void:
 	if state == State.HUNT or state == State.OFF or audibility < 0.2:
 		return
@@ -261,6 +267,7 @@ func _handle_door(delta: float) -> bool:
 		return true
 	# Locked, tied or barricaded: hands are no use here.
 	if _door_timer >= GIVE_UP_DOOR_TIME:
+		turn_from_door(_door)
 		_door = null
 		state = State.ROAM
 		_target = random_nav_point(global_position, ROAM_RADIUS)

@@ -48,7 +48,20 @@ func _burst(point: Vector3) -> void:
 	NoiseManager.emit_noise(point, SHATTER_NOISE, &"glass_shatter", self)
 	SfxSynth.play_at(self, SfxSynth.glass_shatter(), point, 4.0, 1.1, 40.0)
 	_spawn_shards(point)
+	_leave_glass(point)
 	queue_free()
+
+
+## The pieces stay where they fell: loud to walk over, and they cut bare feet.
+func _leave_glass(point: Vector3) -> void:
+	var scene: Node = get_tree().current_scene
+	if scene == null:
+		return
+	var query := PhysicsRayQueryParameters3D.create(point + Vector3.UP * 0.1, point + Vector3.DOWN * 2.5, 1)
+	var hit: Dictionary = get_world_3d().direct_space_state.intersect_ray(query)
+	if hit.is_empty() or (hit["normal"] as Vector3).y < 0.7:
+		return
+	BrokenGlassHazard.spawn(scene, hit["position"], Vector2(1.0, 1.0), randf() * TAU)
 
 
 ## A few glints of glass on the floor where it broke.

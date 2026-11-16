@@ -44,6 +44,7 @@ func _ready() -> void:
 	EventBus.midnight_started.connect(_on_midnight)
 	EventBus.lab_power_cut.connect(_on_lab_power_cut)
 	EventBus.time_advanced.connect(_on_minute_for_robots)
+	EventBus.noise_emitted.connect(_on_noise_for_docks)
 	EventBus.hour_struck.connect(_on_hour_struck)
 	EventBus.rescue_arrived.connect(_on_rescue_arrived)
 	EventBus.game_won.connect(_on_game_won)
@@ -261,6 +262,25 @@ func _on_midnight() -> void:
 func _on_minute_for_robots(_h: int, _m: int, _f: String, _p: float) -> void:
 	if TimeManager.elapsed_minutes >= TimeManager.MIDNIGHT_ELAPSED:
 		_wake_due_robots()
+
+
+## Forcing the gate shakes the whole building. The docks' wake-on-vibration
+## trips and every robot still charging reboots at once, update finished or
+## not - so the gate cannot be had for free in the quiet minutes before
+## midnight (or before the later robots are due).
+func _on_noise_for_docks(_origin: Vector3, _radius: float, noise_type: StringName, _source: Node) -> void:
+	if noise_type != &"gate_breach" or _lab_power_dead or is_game_over:
+		return
+	var woke: bool = false
+	for node: Node in get_tree().get_nodes_in_group(&"hostiles"):
+		var robot := node as RobotBase
+		if robot == null or robot.is_active or robot.is_disabled or not robot.is_docked or robot is PrototypeAI:
+			continue
+		robot.activate()
+		EventBus.robot_online.emit(robot.display_name)
+		woke = true
+	if woke:
+		EventBus.ui_notification.emit("Upstairs, docks unlatch one after another. The noise woke them.", 5.0)
 
 
 func _wake_due_robots() -> void:

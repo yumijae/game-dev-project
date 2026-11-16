@@ -8,14 +8,18 @@ const LAYER_ITEMS: int = 2
 @export var item_id: StringName = &""
 @export var count: int = 1
 
+## Which way it faces; NAN leaves it at whatever angle it was set down.
+var yaw: float = NAN
+
 var _model: Node3D = null
 
 
 ## Creates a pickup under `parent` at a global position.
-static func spawn(parent: Node, id: StringName, amount: int, at: Vector3) -> WorldItem:
+static func spawn(parent: Node, id: StringName, amount: int, at: Vector3, facing: float = NAN) -> WorldItem:
 	var item := WorldItem.new()
 	item.item_id = id
 	item.count = amount
+	item.yaw = facing
 	item.name = "Item_%s" % id
 	parent.add_child(item)
 	item.global_position = at
@@ -31,7 +35,7 @@ func _ready() -> void:
 	# The object itself, set down at whatever angle it was left.
 	_model = ItemModel.build(item_id)
 	_model.position.y = 0.003
-	_model.rotation.y = randf() * TAU
+	_model.rotation.y = randf() * TAU if is_nan(yaw) else yaw
 	add_child(_model)
 	var shape := BoxShape3D.new()
 	shape.size = size.max(Vector3(0.22, 0.18, 0.22))

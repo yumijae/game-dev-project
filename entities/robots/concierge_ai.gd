@@ -269,6 +269,19 @@ func _look_around_then_patrol() -> void:
 	_pick_patrol_target()
 
 
+func _on_found_hidden(at: Vector3) -> void:
+	if state == State.OFF or state == State.DOCKED or _retreat_timer > 0.0:
+		return
+	if Campus.floor_from_y(at.y + 0.3) != home_floor:
+		return
+	_target = _on_my_floor(at)
+	_lose_timer = LOSE_TIME
+	if state != State.CHASE:
+		state = State.CHASE
+		_set_face("alert")
+		_say("There you are, visitor. Please step out.")
+
+
 func _on_heard(origin: Vector3, _noise_type: StringName, audibility: float) -> void:
 	if state == State.CHASE or state == State.OFF or state == State.DOCKED or audibility < 0.15:
 		return
@@ -309,6 +322,7 @@ func _drive(goal: Vector3, speed: float, delta: float) -> bool:
 ## Turned away by a closed door: pick somewhere on this side of it.
 func _avoid_door(door: InteractableDoor) -> void:
 	var side: float = door.which_side(global_position)
+	turn_from_door(door)
 	_target = _on_my_floor(door.get_side_position(side, 4.0))
 	if state == State.CHASE:
 		state = State.INVESTIGATE
