@@ -145,7 +145,9 @@ func build(robot: RobotBase, lead: Vector3, heading: Vector3, reachable: Callabl
 ## nearest open floor on the same storey within sight range. INF if neither.
 static func _stand_point(robot: RobotBase, map: RID, exit: Vector3) -> Vector3:
 	var tight: RID = robot._get_tight_map()
-	if tight.is_valid():
+	# The tight map is loaded on first use and is not queryable until the
+	# navigation server has synchronised it once.
+	if tight.is_valid() and NavigationServer3D.map_get_iteration_id(tight) > 0:
 		var on_tight: Vector3 = NavigationServer3D.map_get_closest_point(tight, exit)
 		if on_tight.distance_to(exit) < 0.6:
 			return on_tight

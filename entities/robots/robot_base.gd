@@ -493,7 +493,9 @@ func _on_noise_emitted(origin: Vector3, radius: float, noise_type: StringName, s
 	if not (source is PlayerController) and origin.distance_to(global_position) < SELF_NOISE_RADIUS:
 		return
 	var ears: Vector3 = get_eye_position()
-	if NoiseManager.can_hear(ears, origin, radius, hearing):
+	# Sound goes round walls and through doorways (shut doors muffle it).
+	var audibility: float = NoiseManager.hear(self, ears, origin, radius, hearing)
+	if audibility > 0.0:
 		if source is PlayerController or source is ThrownBottle:
 			remember(origin)
 		var juan := source as PlayerController
@@ -501,7 +503,7 @@ func _on_noise_emitted(origin: Vector3, radius: float, noise_type: StringName, s
 				and origin.distance_to(global_position) <= HIDING_GIVEAWAY_RANGE:
 			# A gasp or panting from inside the locker it is standing next to.
 			juan.expose_hiding(self)
-		_on_heard(origin, noise_type, NoiseManager.get_audibility(ears, origin, radius, hearing))
+		_on_heard(origin, noise_type, audibility)
 
 
 # ----------------------------------------------------------------- locomotion
