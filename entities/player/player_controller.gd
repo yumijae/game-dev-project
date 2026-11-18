@@ -55,6 +55,11 @@ var inventory: InventoryComponent = null
 var phone: PlayerPhoneUI = null
 ## The CCTV app (V): school security camera feeds on the phone.
 var cctv: CctvApp = null
+## The robot-in-your-face moment when one catches him (and a jolt on a hit).
+var jumpscare: Jumpscare = null
+## A full-screen panel (the combination dial) that has the keys and mouse:
+## Juan stands still and does not look round while it is open.
+var ui_focus: Node = null
 
 var is_crouching: bool = false
 var is_sprinting: bool = false
@@ -146,11 +151,17 @@ func _build_components() -> void:
 	cctv.setup(self)
 	add_child(cctv)
 	phone.attach_screen(cctv)
+	jumpscare = Jumpscare.new()
+	jumpscare.name = "Jumpscare"
+	jumpscare.setup(self)
+	add_child(jumpscare)
 
 
 # ---------------------------------------------------------------------- input
 
 func _unhandled_input(event: InputEvent) -> void:
+	if ui_focus != null:
+		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and not is_peeking and not _is_watching_cameras():
 		var motion := event as InputEventMouseMotion
 		var sensitivity: float = mouse_sensitivity * GameSettings.sensitivity
@@ -277,7 +288,7 @@ func _physics_process(delta: float) -> void:
 		return
 	if is_channeling():
 		_update_channel(delta)
-	var frozen: bool = is_channeling() or is_hidden or is_peeking or _is_watching_cameras()
+	var frozen: bool = is_channeling() or is_hidden or is_peeking or _is_watching_cameras() or ui_focus != null
 	if frozen:
 		is_sprinting = false
 		# Hard labour (dragging furniture) costs stamina; it must not also rest him.
@@ -327,7 +338,8 @@ func _update_camping(delta: float) -> void:
 	var level: float = get_camp_level()
 	if level >= 0.5 and _camp_warned < 1:
 		_camp_warned = 1
-		EventBus.ui_subtitle.emit("I've been here too long. They'll find me.", 4.0, &"Juan")
+		if EventBus.take_chatter_turn():
+			EventBus.ui_subtitle.emit("I've been here too long. They'll find me.", 4.0, &"Juan")
 	elif level >= 1.0 and _camp_warned < 2:
 		_camp_warned = 2
 		EventBus.ui_subtitle.emit("...Something is coming this way. I have to move.", 4.0, &"Juan")
@@ -1024,7 +1036,7 @@ func take_attack(attacker: Hostile) -> bool:
 		end_peek()
 	cancel_channel()
 	if stats.is_bleeding:
-		die("%s caught you." % attacker.display_name)
+		_die_to(attacker)
 		return true
 	_invulnerable_time = WOUND_INVULNERABILITY
 	stats.start_bleeding(attacker.hostile_id)
@@ -1033,6 +1045,8 @@ func take_attack(attacker: Hostile) -> bool:
 	away.y = 0.0
 	velocity = away.normalized() * 6.0 + Vector3.UP * 2.0
 	EventBus.player_wounded.emit(attacker.hostile_id)
+	if attacker is RobotBase:
+		jumpscare.sting(attacker as RobotBase)
 	EventBus.ui_notification.emit("It struck you hard. You are bleeding - one more hit and it is over.", 4.0)
 	return false
 
@@ -1041,6 +1055,23 @@ func die(cause: String) -> void:
 	if is_dead:
 		return
 	is_dead = true
+	_report_death(cause)
+
+
+## Caught for good: its face in his, then the death screen.
+func _die_to(attacker: Hostile) -> void:
+	var cause: String = "%s caught you." % attacker.display_name
+	if is_dead:
+		return
+	is_dead = true
+	phone.set_phone_out(false)
+	if attacker is RobotBase and GameSettings.jumpscares:
+		jumpscare.play(attacker as RobotBase, _report_death.bind(cause))
+	else:
+		_report_death(cause)
+
+
+func _report_death(cause: String) -> void:
 	phone.set_flashlight(false)
 	EventBus.game_lost.emit(cause)
 

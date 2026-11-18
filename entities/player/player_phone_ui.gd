@@ -212,9 +212,7 @@ func attach_screen(cctv: CctvApp) -> void:
 
 func _make_label(parent: Control, font_size: int, color: Color) -> Label:
 	var label := Label.new()
-	var serif := SystemFont.new()
-	serif.font_names = PackedStringArray(["Georgia", "Palatino Linotype", "Book Antiqua", "Times New Roman", "serif"])
-	label.add_theme_font_override("font", serif)
+	label.add_theme_font_override("font", MenuKit.body_font())
 	label.add_theme_font_size_override("font_size", font_size)
 	label.add_theme_color_override("font_color", color)
 	parent.add_child(label)

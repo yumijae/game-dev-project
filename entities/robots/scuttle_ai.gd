@@ -80,6 +80,11 @@ func _init() -> void:
 	body_height = 0.42
 	eye_height = 0.3
 	wake_minute = 60       # 12:45 AM
+	# A tinny diagnostics speaker.
+	voice_hz = 320.0
+	voice_grit = 0.3
+	scare_pitch = 1.45
+	taunt_range = 12.0
 
 
 func kind() -> StringName:
@@ -403,3 +408,22 @@ func _process(delta: float) -> void:
 	# Twitches are instant; everything else eases.
 	model.rotation.y = PI + (yaw if speed <= 0.4 and stun_time_left <= 0.0 and not _squeezing else lerpf(model.rotation.y - PI, yaw, snap))
 	model.position.y = lerpf(model.position.y, lift, snap)
+
+
+# ----------------------------------------------------------------- taunts
+
+## Its inspection firmware, reporting.
+func taunt_lines() -> Dictionary:
+	return {
+		&"spotted": ["Fault located.", "Foreign object detected."],
+		&"chase": ["Clearing obstruction.", "Do not resist inspection.", "Tracking. Tracking. Tracking."],
+		&"lost": ["Signal lost. Rescanning.", "Re-routing through the walls."],
+		&"hiding": ["I fit where you fit.", "Scanning crawl spaces.", "Your breathing is a fault."],
+		&"roam": ["Inspection in progress.", "Checking the cables.", "Every gap. Every gap."],
+		&"hit": ["Obstruction damaged."],
+	}
+
+
+## Leaps up at his face, front legs raised (it is close, so it rears).
+func on_jumpscare() -> void:
+	_hop = 1.0

@@ -522,6 +522,88 @@ static func drip() -> AudioStreamWAV:
 		return samples)
 
 
+## A robot's scream as it lunges: two detuned, overdriven sawtooths sweeping
+## up, ring-modulated into a metallic shriek, over a burst of grinding noise.
+## Play it at a different pitch per robot.
+static func screech() -> AudioStreamWAV:
+	return _cached(&"screech", func() -> PackedFloat32Array:
+		var length: float = 1.25
+		var samples: PackedFloat32Array = _silence(length)
+		var phase_a: float = 0.0
+		var phase_b: float = 0.0
+		var phase_ring: float = 0.0
+		var hold: float = 0.0
+		for i: int in samples.size():
+			var t: float = float(i) / MIX_RATE
+			var u: float = t / length
+			var sweep: float = 1.0 - exp(-t * 9.0)
+			var freq: float = 260.0 + 900.0 * sweep + 70.0 * sin(TAU * 13.0 * t)
+			phase_a = fmod(phase_a + freq / MIX_RATE, 1.0)
+			phase_b = fmod(phase_b + freq * 1.497 / MIX_RATE, 1.0)
+			phase_ring += TAU * (1830.0 + 400.0 * sin(TAU * 3.0 * t)) / MIX_RATE
+			var saws: float = (phase_a * 2.0 - 1.0) * 0.6 + (phase_b * 2.0 - 1.0) * 0.45
+			var ring: float = saws * sin(phase_ring)
+			# Sample-and-hold grit: a crushed, digital edge.
+			if i % 3 == 0:
+				hold = saws * 0.6 + ring * 0.7 + randf_range(-1.0, 1.0) * (0.55 * exp(-t * 4.0) + 0.12)
+			var env: float = minf(t * 300.0, 1.0) * (1.0 - smoothstep(0.7, 1.0, u))
+			samples[i] = tanh(hold * 3.2) * 0.85 * env
+		return samples)
+
+
+## A robot saying `text` aloud: not words, a vocoder-ish chatter, one buzzing
+## syllable per vowel group, each through a randomly picked "vowel" filter.
+## `base_hz` sets the voice, `grit` (0..1) how broken it sounds, `stutter`
+## repeats syllables like a skipping record. Cached per line and voice:
+## building one takes ~15 ms, a dropped frame if it happened mid-chase, so
+## robots build theirs ahead of time (RobotBase.warm_voice).
+static func robot_voice(text: String, base_hz: float, grit: float = 0.2, stutter: bool = false) -> AudioStreamWAV:
+	var key := StringName("voice:%d:%s" % [int(base_hz), text])
+	if _cache.has(key):
+		return _cache[key]
+	var stream: AudioStreamWAV = _build_voice(text, base_hz, grit, stutter)
+	_cache[key] = stream
+	return stream
+
+
+static func _build_voice(text: String, base_hz: float, grit: float, stutter: bool) -> AudioStreamWAV:
+	var syllables: int = 0
+	var in_vowel: bool = false
+	for c: String in text.to_lower():
+		var vowel: bool = "aeiouy".contains(c)
+		if vowel and not in_vowel:
+			syllables += 1
+		in_vowel = vowel
+	syllables = clampi(syllables, 2, 18)
+	var samples := PackedFloat32Array()
+	var phase: float = 0.0
+	var formant_phase: float = 0.0
+	var k: int = 0
+	while k < syllables:
+		var dur: float = randf_range(0.085, 0.15)
+		var pitch: float = base_hz * randf_range(0.88, 1.14)
+		var formant: float = [520.0, 700.0, 900.0, 1250.0, 1700.0].pick_random()
+		var count: int = int(dur * MIX_RATE)
+		var repeat: int = 2 if stutter and randf() < 0.3 else 1
+		for _r: int in repeat:
+			for i: int in count:
+				var t: float = float(i) / MIX_RATE
+				var glide: float = pitch * (1.0 + 0.08 * (1.0 - t / dur))
+				phase = fmod(phase + glide / MIX_RATE, 1.0)
+				formant_phase += TAU * formant / MIX_RATE
+				var buzz: float = clampf((phase * 2.0 - 1.0) * 1.6, -1.0, 1.0)
+				var voiced: float = buzz * (0.55 + 0.45 * sin(formant_phase))
+				var noise: float = randf_range(-1.0, 1.0) * grit * 0.5
+				var env: float = sin(PI * float(i) / float(count))
+				var dropout: float = 0.0 if grit > 0.4 and randf() < grit * 0.004 else 1.0
+				samples.append(tanh((voiced + noise) * (1.4 + grit * 2.0)) * 0.45 * env * dropout)
+		# A short gap between words now and then.
+		var gap: float = randf_range(0.01, 0.03) if randf() > 0.25 else randf_range(0.07, 0.12)
+		samples.append_array(_silence(gap))
+		k += 1
+	return _to_wav(samples, false)
+
+
 ## Fire-and-forget positional sound. The player frees itself when finished.
 static func play_at(host: Node, stream: AudioStream, position: Vector3, volume_db: float = 0.0,
 		pitch: float = 1.0, max_distance: float = 30.0) -> AudioStreamPlayer3D:

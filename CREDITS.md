@@ -88,3 +88,19 @@ mono and levelled for the game (res://audio/sfx).
 - **"Rain (loopable)"** by Ylmir
   https://opengameart.org/content/rain-loopable
   Used as: the rain outside.
+
+## Fonts
+
+From Google Fonts, bundled in res://fonts with their licence files.
+
+- **Crimson Pro** by Jacques Le Bailly - SIL Open Font License 1.1
+  https://fonts.google.com/specimen/Crimson+Pro
+  Used as: all menu and HUD text.
+
+- **Caveat** by Impallari Type - SIL Open Font License 1.1
+  https://fonts.google.com/specimen/Caveat
+  Used as: handwritten notes and the writing on the classroom board.
+
+- **Special Elite** by Astigmatic - Apache License 2.0
+  https://fonts.google.com/specimen/Special+Elite
+  Used as: the typed security memo.

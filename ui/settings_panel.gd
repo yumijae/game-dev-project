@@ -129,6 +129,8 @@ func _build_game(page: VBoxContainer) -> void:
 	_slider(page, "Field of view", GameSettings.FOV_MIN, GameSettings.FOV_MAX, 1.0, GameSettings.fov,
 		func(value: float) -> String: return "%d" % roundi(value),
 		func(value: float) -> void: GameSettings.set_value(&"fov", value))
+	_toggle(page, "Jumpscares", GameSettings.jumpscares, func(on: bool) -> void: GameSettings.set_value(&"jumpscares", on))
+	_toggle(page, "Robot taunts", GameSettings.taunts, func(on: bool) -> void: GameSettings.set_value(&"taunts", on))
 
 
 func _build_audio(page: VBoxContainer) -> void:

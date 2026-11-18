@@ -19,7 +19,7 @@ extends Node3D
 const GUARANTEED: Dictionary = {
 	2: [[ItemDB.WATER, 1]],
 	4: [[ItemDB.FIRE_EXTINGUISHER, 3], [ItemDB.WATER, 1]],
-	5: [[ItemDB.CROWBAR, 1], [ItemDB.TASER, 1], [ItemDB.ALCOHOL, 1], [ItemDB.GAUZE, 1]],
+	5: [[ItemDB.TASER, 1], [ItemDB.ALCOHOL, 1], [ItemDB.GAUZE, 1]],
 	9: [[ItemDB.ALCOHOL, 1]],
 	10: [[ItemDB.GAUZE, 1]],
 	12: [[ItemDB.BOLT_CUTTERS, 1], [ItemDB.TASER, 1], [ItemDB.POWERBANK, 1]],

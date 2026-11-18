@@ -55,6 +55,8 @@ const SERVO_PANIC: float = 60.0
 const WHISPER_PANIC: float = 85.0
 const GASP_PANIC: float = 95.0
 const GASP_INTERVAL: float = 20.0
+## Seconds between Juan's thoughts aloud (it was 28-45: he never shut up).
+const MONOLOGUE_GAP := Vector2(80.0, 130.0)
 const GASP_WINDOW: float = 1.6
 const FALSE_SERVO_TIME: float = 3.0
 const FALSE_LIGHT_TIME: float = 3.0
@@ -70,12 +72,13 @@ const WHISPER_TIME: float = 8.0
 const ECHO_DELAY: float = 0.55
 
 var _player: PlayerController = null
-var _monologue_timer: float = 6.0
+var _monologue_timer: float = 60.0
 var _vibration_timer: float = 20.0
 var _servo_timer: float = 18.0
 var _whisper_timer: float = 12.0
 var _light_timer: float = 9.0
 var _gasp_timer: float = GASP_INTERVAL
+var _last_tier: int = 0
 var _echo_pending: bool = false
 var _echo_timer: float = 0.0
 var _false_servo_left: float = 0.0
@@ -133,14 +136,21 @@ func _process(delta: float) -> void:
 func _update_monologue(delta: float) -> void:
 	_monologue_timer -= delta
 	if _monologue_timer <= 0.0:
-		_monologue_timer = randf_range(28.0, 45.0)
-		_speak(_player.stats.panic_tier)
+		_monologue_timer = randf_range(MONOLOGUE_GAP.x, MONOLOGUE_GAP.y)
+		if EventBus.take_chatter_turn():
+			_speak(_player.stats.panic_tier)
 
 
 func _on_panic_tier_changed(tier: int) -> void:
-	# Say something the moment his state of mind shifts.
-	_monologue_timer = randf_range(28.0, 45.0)
-	_speak(tier)
+	# Say something when he gets more frightened - not on the way back down,
+	# and not if anything was said a moment ago.
+	if tier <= _last_tier:
+		_last_tier = tier
+		return
+	_last_tier = tier
+	if EventBus.take_chatter_turn():
+		_monologue_timer = randf_range(MONOLOGUE_GAP.x, MONOLOGUE_GAP.y)
+		_speak(tier)
 
 
 func _speak(tier: int) -> void:
@@ -220,7 +230,8 @@ func _whisper_at_door() -> void:
 	best.hallucination_time_left = WHISPER_TIME
 	var at: Vector3 = best.get_center() + Vector3.UP * 1.2
 	SfxSynth.play_at(self, SfxSynth.servo(), at, -10.0, 0.7, 14.0)
-	EventBus.ui_subtitle.emit(DOOR_VOICE_LINES[randi() % DOOR_VOICE_LINES.size()], 4.5, &"door_voice")
+	if EventBus.take_chatter_turn():
+		EventBus.ui_subtitle.emit(DOOR_VOICE_LINES[randi() % DOOR_VOICE_LINES.size()], 4.5, &"door_voice")
 	EventBus.hallucination_started.emit(&"whisper_door", at)
 
 

@@ -80,6 +80,8 @@ var _patrol_timer: float = 0.0
 var _talk_timer: float = 8.0
 var _lose_timer: float = 0.0
 var _door_timer: float = 0.0
+var _last_door_line_ms: int = -1000000
+const DOOR_LINE_GAP_MS: int = 90000
 var _look_timer: float = 0.0
 ## Heading for a SearchPlanner waypoint (not a random patrol point).
 var _searching: bool = false
@@ -123,6 +125,10 @@ func _init() -> void:
 	body_height = 1.2
 	eye_height = 1.0
 	wake_minute = 105      # 1:30 AM
+	scare_pitch = 1.2
+	uses_synth_voice = false
+	scare_distance = 0.6
+	taunt_range = SPEECH_RANGE
 
 
 func kind() -> StringName:
@@ -240,8 +246,9 @@ func _tick(delta: float) -> void:
 			_tend_patient(delta)
 		State.PATROL:
 			if _talk_timer <= 0.0:
-				_talk_timer = randf_range(16.0, 26.0)
-				_say(LINES_PATROL[randi() % LINES_PATROL.size()])
+				_talk_timer = randf_range(45.0, 75.0)
+				if EventBus.take_chatter_turn():
+					_say(LINES_PATROL[randi() % LINES_PATROL.size()])
 			_patrol_timer -= delta
 			var reached: bool = _drive(_target, PATROL_SPEED, delta)
 			if _searching and reached:
@@ -435,7 +442,11 @@ func _drive(goal: Vector3, speed: float, delta: float) -> bool:
 		face_point(door.get_center(), delta, 4.0)
 		if _door_timer > 0.6 and _door_timer - delta <= 0.6:
 			_helper = RobotBase.call_for_help(door, self)
-			_say(LINE_HELP if _helper != null else LINE_DOOR)
+			# Asks out loud only now and then; at every door it was constant.
+			var now: int = Time.get_ticks_msec()
+			if now - _last_door_line_ms > DOOR_LINE_GAP_MS and EventBus.take_chatter_turn(8.0):
+				_last_door_line_ms = now
+				_say(LINE_HELP if _helper != null else LINE_DOOR)
 		var helped: bool = _helper != null and is_instance_valid(_helper) and _helper.help_door == door and _helper.is_helping()
 		if _door_timer >= (HELP_WAIT if helped else DOOR_WAIT):
 			_door_timer = 0.0
@@ -652,3 +663,27 @@ func _set_face(mood: String) -> void:
 		_screen_mat.albedo_color = col * 0.25 if mood != "off" else Color(0.02, 0.02, 0.02)
 		_screen_mat.emission = col * 0.35
 		_screen_mat.emission_energy_multiplier = 0.0 if mood == "off" else 1.2
+
+
+# ----------------------------------------------------------------- taunts
+
+## It already greets, spots, loses and thanks him itself; these fill the
+## chase and the hiding.
+func taunt_lines() -> Dictionary:
+	return {
+		&"chase": ["Please do not run in the hallways.", "Visitors must remain with their escort.",
+			"Your visit has been extended. Indefinitely."],
+		&"hiding": ["This area is closed to visitors. Please come out.", "I will wait. I have excellent patience.",
+			"Hide-and-seek is not on today's programme."],
+	}
+
+
+## In its own voice: the chime, the nod, the subtitle.
+func speak(line: String) -> void:
+	_say(line)
+
+
+## Its screen flares red as it rams him.
+func on_jumpscare() -> void:
+	_set_face("alert")
+	_lunge = 1.0

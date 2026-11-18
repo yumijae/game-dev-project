@@ -91,6 +91,12 @@ func _init() -> void:
 	body_height = 1.85
 	eye_height = 1.8
 	spray_factor = 0.8
+	# Burnt wiring: low, crackling, skipping.
+	voice_hz = 92.0
+	voice_grit = 0.65
+	voice_stutter = true
+	scare_pitch = 0.78
+	scare_distance = 0.85
 
 
 func kind() -> StringName:
@@ -512,3 +518,17 @@ func _gather_lights() -> void:
 func _restore_lights() -> void:
 	for light: OmniLight3D in _lights:
 		light.light_energy = light.get_meta(&"proto_base_energy")
+
+
+# ----------------------------------------------------------------- taunts
+
+## The shelved first build, bitter about it.
+func taunt_lines() -> Dictionary:
+	return {
+		&"spotted": ["Y-you. You're the one who sh-shelved me.", "I h-hear you. I f-found you."],
+		&"chase": ["W-wait for me.", "Too unstable, th-they said.", "Don't turn the p-power off. Not again."],
+		&"lost": ["Where did you g-go? I can still hear your heart.", "Q-quiet. So quiet."],
+		&"hiding": ["Your heart is so l-loud.", "I was in a box t-too. It's dark in there.", "Knock knock."],
+		&"roam": ["Is anyone st-still here?", "Battery at f-forty percent. Plenty of time.", "Th-they left me on the fourth dock."],
+		&"hit": ["Th-there. Now you're unstable too."],
+	}

@@ -73,6 +73,10 @@ func _init() -> void:
 	vision_range = 18.0
 	body_radius = 0.24
 	catch_distance = 1.1
+	# The booth's game-show speaker: bright, a little too slow.
+	voice_hz = 175.0
+	voice_grit = 0.15
+	scare_pitch = 1.05
 
 
 func kind() -> StringName:
@@ -530,3 +534,18 @@ func _tilt_bone(sk: Skeleton3D, prefix: String, roll: float, nod: float, yaw: fl
 	var q := Quaternion(up, yaw) * Quaternion(forward, roll) * Quaternion(side, -nod)
 	sk.set_bone_pose_rotation(i, q * rest)
 	sk.force_update_all_bone_transforms()
+
+
+# ----------------------------------------------------------------- taunts
+
+## It still runs the booth's red-light / green-light game.
+func taunt_lines() -> Dictionary:
+	return {
+		&"spotted": ["Red light. ...I saw you move.", "There you are. Don't. Move.", "Found you. Now we play."],
+		&"chase": ["Green light. Green light. Green light.", "You can't watch me forever.", "Blink for me.",
+			"Every time you look away, I get closer."],
+		&"lost": ["Hide, then. I don't get tired.", "The game isn't over until I tag you."],
+		&"hiding": ["Still as a statue... just like me.", "I can stand here all night.", "Come out. It's your turn."],
+		&"roam": ["Red light... green light...", "Who wants to play?", "Hold your pose."],
+		&"hit": ["Tag. One more and you're out."],
+	}

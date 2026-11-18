@@ -62,6 +62,11 @@ signal objective_updated(objective_id: StringName, text: String, progress: float
 signal sos_progress_changed(seconds: float, required: float)
 signal sos_sent()
 signal gate_breach_progress(ratio: float)
+## Juan read one of the notes with a digit of the side lock's combination.
+## `index` 0..3 is its place in the code.
+signal gate_code_hint_found(index: int, digit: int)
+## Something written was read: show it full size. `style` is &"hand" or &"typed".
+signal note_read(text: String, style: StringName)
 signal gate_opened(method: StringName)
 ## WARDEN's circuit (server, CCTV, Com Sci Lab docks) lost power. `cause` is
 ## &"breaker" (LP-2F main thrown by Juan) or &"ups_empty" (backup battery ran out).
@@ -70,3 +75,25 @@ signal lab_power_cut(cause: StringName)
 signal robot_online(display_name: String)
 signal game_won(ending_id: StringName, title: String, description: String)
 signal game_lost(cause: String)
+## A robot caught Juan: its face fills the screen (the HUD hides) until
+## game_lost brings the death screen.
+signal jumpscare_started()
+
+
+# ------------------------------------------------------------- chatter budget
+# Optional lines (robot taunts, CONCIERGE's small talk, Juan thinking aloud,
+# voices behind doors) share one budget so the night is mostly quiet: after
+# any of them, the others wait at least CHATTER_GAP. Lines that warn of
+# danger or tell the story do not ask; they just play.
+
+const CHATTER_GAP: float = 20.0
+var _last_chatter_ms: int = -1000000
+
+
+## True (and the budget is spent) when an optional line may play now.
+func take_chatter_turn(gap: float = CHATTER_GAP) -> bool:
+	var now: int = Time.get_ticks_msec()
+	if now - _last_chatter_ms < int(gap * 1000.0):
+		return false
+	_last_chatter_ms = now
+	return true

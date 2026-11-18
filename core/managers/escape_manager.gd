@@ -10,8 +10,9 @@ extends Node
 ##   3. Gate Breach       - after midnight: the Master Gate Key (one of the
 ##                          Server Room, Faculty Room, Room 403 or Pantry)
 ##                          for the padlock, bolt cutters (MIT Office #12) for
-##                          the chain and a crowbar (Staff Room #5) for the
-##                          track - 30 loud seconds every robot homes in on.
+##                          the chain, and the side lock's combination, one
+##                          digit written down on each floor - then a loud
+##                          haul every robot homes in on.
 ## In every case the run is won by walking out through the open gate.
 
 const SOS_REQUIRED_SECONDS: float = 45.0

@@ -37,6 +37,9 @@ func _ready() -> void:
 	var dresser := SetDresser.new()
 	dresser.name = "SetDresser"
 	add_child(dresser)
+	var hints := GateCodeHints.new()
+	hints.name = "GateCodeHints"
+	add_child(hints)
 	_place_player()
 	_lock_main_entrance()
 	_seal_under_stairs()
@@ -52,6 +55,8 @@ func _ready() -> void:
 	EventBus.game_lost.connect(_on_game_lost)
 	TimeManager.start()
 	_wake_up_bang.call_deferred()
+	# Built now, not on the first catch: an 18 ms stall mid-jumpscare shows.
+	SfxSynth.screech.call_deferred()
 	var culler := FloorCuller.new()
 	culler.name = "FloorCuller"
 	add_child(culler)
@@ -102,6 +107,7 @@ func _wake_up_bang() -> void:
 	SfxSynth.play_ui(self, SfxSynth.thud(), -4.0, 0.38)
 	await get_tree().create_timer(1.4).timeout
 	EventBus.ui_subtitle.emit("...What was that bang? It's dark. 11:45. And the charger's dead - phone's only on 35%.", 6.0, &"Juan")
+	EventBus.take_chatter_turn(0.0)   # story line: the small talk waits after it
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -304,6 +310,7 @@ func _on_lab_power_cut(cause: StringName) -> void:
 func _on_midnight() -> void:
 	_wake_due_robots()
 	EventBus.ui_subtitle.emit("12:00. Somewhere downstairs, something just... whirred.", 4.5, &"Juan")
+	EventBus.take_chatter_turn(0.0)   # story line: the small talk waits after it
 
 
 func _on_minute_for_robots(_h: int, _m: int, _f: String, _p: float) -> void:

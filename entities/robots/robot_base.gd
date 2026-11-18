@@ -116,6 +116,7 @@ func _ready() -> void:
 		add_child(model)
 	EventBus.noise_emitted.connect(_on_noise_emitted)
 	_on_built()
+	warm_voice.call_deferred()
 
 
 # ------------------------------------------------------------------ lifecycle
@@ -218,6 +219,7 @@ func _physics_process(delta: float) -> void:
 		ground_idle(delta)
 		return
 	_tick(delta)
+	_update_taunts(delta)
 
 
 # ------------------------------------------------------------------ overrides
@@ -712,6 +714,9 @@ func try_attack_player() -> bool:
 		return false
 	attack_cooldown = ATTACK_COOLDOWN
 	var fatal: bool = player.take_attack(self)
+	if not fatal and Time.get_ticks_msec() - _last_hit_line_ms > HIT_LINE_GAP_MS:
+		_last_hit_line_ms = Time.get_ticks_msec()
+		taunt(&"hit", true)
 	_on_attack_landed(fatal)
 	return true
 
@@ -764,3 +769,122 @@ func _apply_gravity(delta: float) -> void:
 		velocity.y = 0.0
 	else:
 		velocity.y -= _gravity * delta
+
+
+# -------------------------------------------------------------- jumpscare
+
+## Pitch of its screech when it lunges at the camera (Jumpscare).
+var scare_pitch: float = 1.0
+## How far in front of the lens its eyes end up (a big head needs more room).
+var scare_distance: float = 0.45
+
+
+## It has caught Juan and is about to be in his face: strike a pose.
+func on_jumpscare() -> void:
+	pass
+
+
+# ----------------------------------------------------------------- taunts
+# The robots talk to Juan - sparingly: when they spot him, now and then in a
+# chase, when they lose him, near where he is hiding, and when they hit him.
+# Apart from the hit, every line spends the shared chatter budget
+# (EventBus.take_chatter_turn), so they never pile up.
+# Every line is subtitled; the voice is synthesised (SfxSynth.robot_voice).
+
+## Voice: fundamental (Hz), how broken it sounds (0..1), skipping syllables.
+var voice_hz: float = 140.0
+var voice_grit: float = 0.2
+var voice_stutter: bool = false
+## Beyond this Juan cannot make out what it says.
+var taunt_range: float = 16.0
+## False for a robot that speaks with its own sound (CONCIERGE's chime).
+var uses_synth_voice: bool = true
+
+## Seconds between lines, per robot and across all of them (no talking over
+## one another).
+const TAUNT_GAP := Vector2(30.0, 50.0)
+const TAUNT_CHASE_GAP := Vector2(18.0, 30.0)
+const TAUNT_HIDING_RANGE: float = 7.0
+## Seen him this long, then not for LOST_DELAY: it has lost him.
+const TAUNT_LOST_DELAY: float = 2.5
+
+var _taunt_timer: float = 6.0
+var _was_seeing: bool = false
+var _seen_for: float = 0.0
+var _unseen_for: float = 0.0
+var _lost_said: bool = true
+var _last_line: String = ""
+## The hit line plays at most this often (ms), whatever else is going on.
+const HIT_LINE_GAP_MS: int = 45000
+var _last_hit_line_ms: int = -1000000
+
+
+## Lines per moment: &"spotted", &"chase", &"lost", &"hiding", &"hit".
+## (&"roam" lines are kept but not spoken: chatter while it prowled out of
+## sight was too much.) A robot leaves out the ones it already speaks itself.
+func taunt_lines() -> Dictionary:
+	return {}
+
+
+## Says a line from `moment` if Juan is in earshot. `force` skips the gaps.
+func taunt(moment: StringName, force: bool = false) -> bool:
+	if not GameSettings.taunts or player == null or player.is_dead:
+		return false
+	var lines: Array = taunt_lines().get(moment, [])
+	if lines.is_empty() or get_player_distance() > taunt_range:
+		return false
+	if not force and (_taunt_timer > 0.0 or not EventBus.take_chatter_turn()):
+		return false
+	var line: String = lines.pick_random()
+	if lines.size() > 1:
+		while line == _last_line:
+			line = lines.pick_random()
+	_last_line = line
+	_taunt_timer = randf_range(TAUNT_GAP.x, TAUNT_GAP.y)
+	speak(line)
+	return true
+
+
+## Builds every line it can say, one per frame, while it is still docked,
+## so speaking later never stalls a frame.
+func warm_voice() -> void:
+	if not uses_synth_voice or not GameSettings.taunts:
+		return
+	for lines: Array in taunt_lines().values():
+		for line: String in lines:
+			if not is_inside_tree():
+				return
+			SfxSynth.robot_voice(line, voice_hz, voice_grit, voice_stutter)
+			await get_tree().process_frame
+
+
+## Says `line` out loud with its own voice, subtitled.
+func speak(line: String) -> void:
+	SfxSynth.play_at(self, SfxSynth.robot_voice(line, voice_hz, voice_grit, voice_stutter),
+		get_eye_position(), -4.0, 1.0, taunt_range + 4.0)
+	EventBus.ui_subtitle.emit(line, clampf(1.2 + line.length() * 0.06, 2.5, 5.0), StringName(display_name))
+
+
+func _update_taunts(delta: float) -> void:
+	_taunt_timer -= delta
+	if player == null or player.is_dead or not is_threatening():
+		return
+	var seeing: bool = saw_player_recently()
+	if seeing:
+		_seen_for += delta
+		_unseen_for = 0.0
+		if not _was_seeing:
+			_lost_said = false
+			taunt(&"spotted")
+		elif _taunt_timer <= 0.0 and taunt(&"chase"):
+			_taunt_timer = randf_range(TAUNT_CHASE_GAP.x, TAUNT_CHASE_GAP.y)
+	else:
+		_unseen_for += delta
+		if not _lost_said and _seen_for > 1.5 and _unseen_for > TAUNT_LOST_DELAY:
+			_lost_said = true
+			_seen_for = 0.0
+			taunt(&"lost")
+		elif player.is_hidden and absf(player.global_position.y - global_position.y) < 2.0 				and get_player_distance() < TAUNT_HIDING_RANGE:
+			taunt(&"hiding")
+
+	_was_seeing = seeing

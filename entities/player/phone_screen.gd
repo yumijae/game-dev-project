@@ -120,6 +120,8 @@ var _thread_name: Label = null
 var _thread_avatar: Avatar = null
 # notes
 var _objectives: Array[String] = []
+## Side-lock digits Juan has read, by place in the code.
+var _code_digits: Dictionary = {}
 var _notes_list: VBoxContainer = null
 var _notes_unseen: bool = false
 # clock
@@ -151,6 +153,7 @@ func _ready() -> void:
 	EventBus.objective_updated.connect(_on_objective)
 	EventBus.sos_progress_changed.connect(_on_sos_progress)
 	EventBus.sos_sent.connect(_on_sos_sent)
+	EventBus.gate_code_hint_found.connect(_on_code_hint)
 	EventBus.midnight_started.connect(_on_update_complete)
 	EventBus.robot_online.connect(_on_robot_online)
 	EventBus.lab_power_cut.connect(_on_server_lost)
@@ -554,6 +557,23 @@ func _on_objective(_id: StringName, text: String, _p: float) -> void:
 	_refresh_icons()
 
 
+## A digit of the side lock's code: jotted into Notes.
+func _on_code_hint(index: int, digit: int) -> void:
+	_code_digits[index] = digit
+	_notes_unseen = true
+	_notify(&"notes", "Notes", "Side gate lock: %s" % _code_text())
+	if page == Page.NOTES:
+		_refresh_notes()
+	_refresh_icons()
+
+
+func _code_text() -> String:
+	var parts: PackedStringArray = []
+	for i: int in 4:
+		parts.append(str(_code_digits[i]) if _code_digits.has(i) else "_")
+	return " ".join(parts)
+
+
 ## 12:00 AM: the update finishes. The phone buzzes even in Juan's pocket.
 func _on_update_complete() -> void:
 	if _update_done:
@@ -803,6 +823,14 @@ func _refresh_notes() -> void:
 		c.queue_free()
 	if _objectives.is_empty():
 		_objectives.append("Get out of the building.")
+	if not _code_digits.is_empty():
+		var code := _label(13, WHITE, 600)
+		code.text = "Side gate lock:   %s" % _code_text()
+		_notes_list.add_child(code)
+		var rule := Panel.new()
+		rule.custom_minimum_size = Vector2(0, 1)
+		rule.add_theme_stylebox_override(&"panel", box(Color(1, 1, 1, 0.08), 0.0))
+		_notes_list.add_child(rule)
 	var start: int = maxi(_objectives.size() - 7, 0)
 	for i in range(_objectives.size() - 1, start - 1, -1):
 		var current: bool = i == _objectives.size() - 1
