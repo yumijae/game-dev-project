@@ -40,7 +40,7 @@ const ITEMS: Dictionary = {
 	BOLT_CUTTERS: {"name": "Bolt Cutters", "kg": 2.5, "stack": 1, "color": Color(0.7, 0.15, 0.12), "size": Vector3(0.5, 0.05, 0.14),
 		"desc": "From the MIT Office. Cuts the gate's chain."},
 	CROWBAR: {"name": "Crowbar", "kg": 1.8, "stack": 1, "color": Color(0.2, 0.25, 0.5), "size": Vector3(0.6, 0.04, 0.08),
-		"desc": "From the Staff Room. Forces the gate's jammed track."},
+		"use": "Barricade a shut door (aim at it)", "desc": "From the Staff Room. Jam it under a shut door and nothing opens it from outside - SCUTTLE can't squeeze under it either. Only PROTOTYPE can batter it loose."},
 	POWERBANK: {"name": "Powerbank", "kg": 0.25, "stack": 1, "color": Color(0.15, 0.15, 0.17), "size": Vector3(0.07, 0.02, 0.14),
 		"use": "Charge phone (+30%)", "desc": "Someone's half-charged powerbank."},
 }
