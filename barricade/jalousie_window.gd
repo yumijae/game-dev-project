@@ -231,12 +231,12 @@ func interact(player: PlayerController, action_id: StringName) -> void:
 		# outdoors, so its local -X half is on the right of someone facing it.
 		&"open", &"open_right":
 			open_side = -1
-			_crank(State.OPEN)
+			_crank(State.OPEN, player)
 		&"open_left":
 			open_side = 1
-			_crank(State.OPEN)
+			_crank(State.OPEN, player)
 		&"close":
-			_crank(State.CLOSED)
+			_crank(State.CLOSED, player)
 
 
 func set_state(new_state: State) -> void:
@@ -246,12 +246,12 @@ func set_state(new_state: State) -> void:
 	_apply_state()
 
 
-func _crank(new_state: State) -> void:
+func _crank(new_state: State, by: Node = null) -> void:
 	if state == State.SHATTERED or new_state == state:
 		return
 	state = new_state
 	_animate_slide()
-	NoiseManager.emit_noise(global_position, CRANK_NOISE, &"jalousie_crank", self)
+	NoiseManager.emit_noise(global_position, CRANK_NOISE, &"jalousie_crank", by if by != null else self)
 
 
 # ------------------------------------------------------------------ Robot API

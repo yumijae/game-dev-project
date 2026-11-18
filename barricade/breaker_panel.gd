@@ -32,6 +32,8 @@ var _sparks: CPUParticles3D = null
 var _hum: AudioStreamPlayer3D = null
 var _tween: Tween = null
 var _strain: float = 0.0
+## Who is forcing the lever (the final clank is their noise).
+var _cutter: Node = null
 
 
 static func create() -> BreakerPanel:
@@ -76,6 +78,7 @@ func interact(player: PlayerController, action_id: StringName) -> void:
 		&"cut":
 			if is_power_cut:
 				return
+			_cutter = player
 			var started: bool = player.start_channel("Forcing the main breaker", CUT_TIME, _finish_cut, {
 				"noise_type": &"metal_clatter", "noise_radius": CUT_NOISE * 0.5, "noise_interval": 1.2,
 				"can_fumble": false, "on_tick": _on_cut_tick, "on_cancel": _on_cut_cancel,
@@ -113,7 +116,7 @@ func _finish_cut() -> void:
 		return
 	var t := create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	t.tween_property(_lever_pivot, ^"rotation_degrees:x", LEVER_OFF_DEG, 0.09)
-	NoiseManager.emit_noise(global_position, CUT_NOISE, &"metal_clatter", self)
+	NoiseManager.emit_noise(global_position, CUT_NOISE, &"metal_clatter", _cutter if _cutter != null else self)
 	EventBus.lab_power_cut.emit(&"breaker")
 
 

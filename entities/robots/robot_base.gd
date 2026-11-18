@@ -498,6 +498,8 @@ func _on_noise_emitted(origin: Vector3, radius: float, noise_type: StringName, s
 	if audibility > 0.0:
 		if source is PlayerController or source is ThrownBottle:
 			remember(origin)
+		if source is PlayerController:
+			EventBus.player_noise_heard.emit(self)
 		var juan := source as PlayerController
 		if juan != null and juan.is_hidden and absf(origin.y - global_position.y) < 2.0 \
 				and origin.distance_to(global_position) <= HIDING_GIVEAWAY_RANGE:

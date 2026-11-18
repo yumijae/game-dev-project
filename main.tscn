@@ -1,20 +1,19 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://d7x2ks07hky0"]
 
 [ext_resource type="PackedScene" path="res://school/school_building.scn" id="1_vivmo"]
-[ext_resource type="Texture2D" path="res://textures/polyhaven/grass_ground/grass_ground_diff_1k.jpg" id="2_2cqfq"]
-[ext_resource type="Texture2D" path="res://textures/polyhaven/grass_ground/grass_ground_nor_gl_1k.jpg" id="3_yaehf"]
-[ext_resource type="Texture2D" path="res://textures/polyhaven/grass_ground/grass_ground_rough_1k.jpg" id="4_074og"]
-[ext_resource type="Texture2D" path="res://textures/polyhaven/asphalt_02/asphalt_02_diff_1k.jpg" id="5_cegan"]
-[ext_resource type="Texture2D" path="res://textures/polyhaven/asphalt_02/asphalt_02_nor_gl_1k.jpg" id="6_82xsv"]
-[ext_resource type="Texture2D" path="res://textures/polyhaven/asphalt_02/asphalt_02_rough_1k.jpg" id="7_getpj"]
+[ext_resource type="Texture2D" uid="uid://pr7goyt2tn3h" path="res://textures/polyhaven/grass_ground/grass_ground_diff_1k.jpg" id="2_2cqfq"]
+[ext_resource type="Texture2D" uid="uid://de18dueni8ojm" path="res://textures/polyhaven/grass_ground/grass_ground_nor_gl_1k.jpg" id="3_yaehf"]
+[ext_resource type="Texture2D" uid="uid://btpcpnj3jwjo4" path="res://textures/polyhaven/grass_ground/grass_ground_rough_1k.jpg" id="4_074og"]
+[ext_resource type="Texture2D" uid="uid://cy4up8kie7ial" path="res://textures/polyhaven/asphalt_02/asphalt_02_diff_1k.jpg" id="5_cegan"]
+[ext_resource type="Texture2D" uid="uid://ceh42i3np5d5k" path="res://textures/polyhaven/asphalt_02/asphalt_02_nor_gl_1k.jpg" id="6_82xsv"]
+[ext_resource type="Texture2D" uid="uid://bt8e1gisu4rox" path="res://textures/polyhaven/asphalt_02/asphalt_02_rough_1k.jpg" id="7_getpj"]
 [ext_resource type="NavigationMesh" path="res://school/school_navmesh.res" id="8_ryguw"]
 [ext_resource type="PackedScene" path="res://player/player.tscn" id="9_d13ii"]
-[ext_resource type="Script" path="res://entities/player/player_controller.gd" id="10_1u8w0"]
-[ext_resource type="Script" path="res://ui/post_fx.gd" id="11_0odxb"]
-[ext_resource type="Script" path="res://ui/hud.gd" id="12_lswn8"]
-[ext_resource type="Script" path="res://core/managers/hallucination_manager.gd" id="13_a6jrf"]
-[ext_resource type="Script" path="res://core/managers/escape_manager.gd" id="14_xuqvo"]
-[ext_resource type="Script" path="res://core/managers/game_director.gd" id="15_qsp4k"]
+[ext_resource type="Script" uid="uid://dipce5f4h7iip" path="res://ui/post_fx.gd" id="11_0odxb"]
+[ext_resource type="Script" uid="uid://dhs5d0vkre86l" path="res://ui/hud.gd" id="12_lswn8"]
+[ext_resource type="Script" uid="uid://be6rxv24yhtsu" path="res://core/managers/hallucination_manager.gd" id="13_a6jrf"]
+[ext_resource type="Script" uid="uid://dhfs5yxvmiswy" path="res://core/managers/escape_manager.gd" id="14_xuqvo"]
+[ext_resource type="Script" uid="uid://bfpkvh73usbvy" path="res://core/managers/game_director.gd" id="15_qsp4k"]
 
 [sub_resource type="Environment" id="Environment_kq58d"]
 background_mode = 1
@@ -89,10 +88,8 @@ size = Vector3(120, 0.2, 120)
 
 [node name="Main" type="Node3D" unique_id=917145388]
 
-[node name="STI_School" type="Node3D" parent="." unique_id=529363685 groups=["school"] instance=ExtResource("1_vivmo")]
+[node name="STI_School" parent="." unique_id=529363685 instance=ExtResource("1_vivmo")]
 metadata/rooms = [["Admissions Office", 0, -12.0, 1.2, -3.0, 8.0], ["Main Lobby", 0, -3.0, 1.2, 3.0, 8.0], ["Cashier & Registrar", 0, 3.0, 1.2, 12.0, 8.0], ["Director's Office", 0, -9.0, -8.0, -3.0, -1.2], ["Staff Room", 0, -3.0, -8.0, 3.0, -1.2], ["Records Room", 0, 3.0, -8.0, 9.0, -1.2], ["Computer Lab 1", 1, -12.0, 1.2, 0.0, 8.0], ["Computer Lab 2", 1, 0.0, 1.2, 12.0, 8.0], ["Male Restroom", 1, -9.0, -8.0, -6.0, -1.2], ["Female Restroom", 1, -6.0, -8.0, -3.0, -1.2], ["Server Room", 1, -3.0, -8.0, 0.0, -1.2], ["MIT Office", 1, 0.0, -8.0, 3.0, -1.2], ["Computer Lab 3", 1, 3.0, -8.0, 9.0, -1.2], ["Room 301", 2, -12.0, 1.2, -6.0, 8.0], ["Room 302", 2, -6.0, 1.2, 0.0, 8.0], ["Room 303", 2, 0.0, 1.2, 6.0, 8.0], ["Room 304", 2, 6.0, 1.2, 12.0, 8.0], ["Faculty Room", 2, -9.0, -8.0, -3.0, -1.2], ["Male Restroom", 2, -3.0, -8.0, 0.0, -1.2], ["Female Restroom", 2, 0.0, -8.0, 3.0, -1.2], ["Room 305", 2, 3.0, -8.0, 9.0, -1.2], ["Room 401", 3, -12.0, 1.2, -6.0, 8.0], ["Room 402", 3, -6.0, 1.2, 0.0, 8.0], ["Culinary Kitchen", 3, 0.0, 1.2, 12.0, 8.0], ["Room 403", 3, -9.0, -8.0, 0.0, -1.2], ["Pantry", 3, 0.0, -8.0, 3.0, -1.2], ["Culinary Dining", 3, 3.0, -8.0, 9.0, -1.2], ["Corridor", 0, -12.0, -1.2, 12.0, 1.2], ["Corridor", 1, -12.0, -1.2, 12.0, 1.2], ["Corridor", 2, -12.0, -1.2, 12.0, 1.2], ["Corridor", 3, -12.0, -1.2, 12.0, 1.2], ["West Stairwell", 0, -12.0, -8.0, -9.0, -1.2], ["West Stairwell", 1, -12.0, -8.0, -9.0, -1.2], ["West Stairwell", 2, -12.0, -8.0, -9.0, -1.2], ["West Stairwell", 3, -12.0, -8.0, -9.0, -1.2], ["East Stairwell", 0, 9.0, -8.0, 12.0, -1.2], ["East Stairwell", 1, 9.0, -8.0, 12.0, -1.2], ["East Stairwell", 2, 9.0, -8.0, 12.0, -1.2], ["East Stairwell", 3, 9.0, -8.0, 12.0, -1.2]]
-metadata/floor_names = ["1F", "2F", "3F", "4F", "Roof"]
-metadata/floor_height = 3.8
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1952442116]
 environment = SubResource("Environment_kq58d")
@@ -123,13 +120,8 @@ shape = SubResource("BoxShape3D_0rl1p")
 [node name="NavigationRegion3D" type="NavigationRegion3D" parent="." unique_id=1847253476]
 navigation_mesh = ExtResource("8_ryguw")
 
-[node name="Player" type="CharacterBody3D" parent="." unique_id=998661264 instance=ExtResource("9_d13ii")]
+[node name="Player" parent="." unique_id=998661264 instance=ExtResource("9_d13ii")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 11.45, 4.6)
-collision_layer = 4
-collision_mask = 25
-floor_max_angle = 0.9599311
-floor_snap_length = 0.3
-script = ExtResource("10_1u8w0")
 
 [node name="PostFX" type="CanvasLayer" parent="." unique_id=1751737540]
 script = ExtResource("11_0odxb")

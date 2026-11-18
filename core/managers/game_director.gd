@@ -39,6 +39,7 @@ func _ready() -> void:
 	add_child(dresser)
 	_place_player()
 	_lock_main_entrance()
+	_seal_under_stairs()
 	_start_server_hum()
 	_spawn_robots.call_deferred()
 	EventBus.midnight_started.connect(_on_midnight)
@@ -216,6 +217,52 @@ func _place_player() -> void:
 	else:
 		_player.global_position = Campus.room_center(START_ROOM_ID) + Vector3(0.0, 0.05, -2.0)
 	_player.velocity = Vector3.ZERO
+
+
+## On 1F the space under each stair landing (and, through it, the hollow
+## under the bottom flight) was open: only 1.7 m high, yet Juan could squeeze
+## in past the fire exit and end up inside the stairs' concrete, seeing
+## through the walls. Closes it off: a solid block under the landing and a
+## plastered wall facing anyone who walks under the upper flight.
+func _seal_under_stairs() -> void:
+	var school: Node = get_tree().get_first_node_in_group(&"school")
+	if school == null:
+		return
+	var plaster: Material = null
+	var walls := school.get_node_or_null("Visual/Mesh_int") as MeshInstance3D
+	if walls != null and walls.mesh != null and walls.mesh.get_surface_count() > 0:
+		plaster = walls.mesh.surface_get_material(0)
+	if plaster == null:
+		var flat := StandardMaterial3D.new()
+		flat.albedo_color = Color(0.74, 0.71, 0.66)
+		flat.roughness = 0.95
+		plaster = flat
+	# Stairwell interiors (inside the walls) and where the landing begins.
+	const LANDING_EDGE: float = -5.6
+	const BACK_WALL: float = -7.875
+	const UNDERSIDE: float = 1.69
+	for span: Vector2 in [Vector2(-11.875, -9.075), Vector2(9.075, 11.875)]:
+		var width: float = span.y - span.x
+		var depth: float = LANDING_EDGE - BACK_WALL
+		var centre := Vector3((span.x + span.y) * 0.5, UNDERSIDE * 0.5, (LANDING_EDGE + BACK_WALL) * 0.5)
+		var block := StaticBody3D.new()
+		block.name = "UnderStairSeal"
+		block.collision_layer = 1
+		block.collision_mask = 0
+		var shape := CollisionShape3D.new()
+		var box := BoxShape3D.new()
+		box.size = Vector3(width, UNDERSIDE, depth)
+		shape.shape = box
+		block.add_child(shape)
+		var face := MeshInstance3D.new()
+		var panel := BoxMesh.new()
+		panel.size = Vector3(width, UNDERSIDE, 0.02)
+		panel.material = plaster
+		face.mesh = panel
+		face.position = Vector3(0.0, 0.0, depth * 0.5 - 0.01)
+		block.add_child(face)
+		school.add_child(block)
+		block.global_position = centre
 
 
 func _lock_main_entrance() -> void:

@@ -80,6 +80,7 @@ var _inventory_bar: HBoxContainer = null
 var _slot_names: Array[Label] = []
 var _slot_rules: Array[ColorRect] = []
 var _gasp_label: Label = null
+var _noise_meter: NoiseMeter = null
 var _vignette: ColorRect = null
 var _end_panel: ColorRect = null
 var _end_title: Label = null
@@ -136,6 +137,7 @@ func _process(delta: float) -> void:
 	_fade_targets[_location] = 1.0 if _location_time > 0.0 else IDLE_ALPHA
 	_fade_targets[_inventory_bar] = 1.0 if _inventory_time > 0.0 else IDLE_ALPHA
 	_fade_targets[_end_panel] = 1.0 if _is_over else 0.0
+	_noise_meter.visible = not _is_over
 	for element: Control in _fade_targets:
 		var target: float = _fade_targets[element]
 		element.modulate.a = move_toward(element.modulate.a, target, delta * FADE_SPEED)
@@ -285,6 +287,19 @@ func _build() -> void:
 		item.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
 		_slot_names.append(item)
 		_slot_rules.append(_rule(slot, 98.0, Color(ASH, 0.35)))
+
+	# Bottom right: how loud Juan just was; red when a robot heard it.
+	_noise_meter = NoiseMeter.new()
+	_noise_meter.bone = BONE
+	_noise_meter.ash = ASH
+	_noise_meter.ember = EMBER
+	_noise_meter.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	_noise_meter.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_noise_meter.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_noise_meter.offset_right = -32.0
+	_noise_meter.offset_bottom = -104.0
+	_noise_meter.set_player(_player)
+	_root.add_child(_noise_meter)
 
 	_notification = _label(_root, 16, BONE, _font_caps)
 	_notification.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)

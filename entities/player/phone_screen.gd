@@ -4,7 +4,6 @@ extends Control
 ## (everything on it is masked to the screen's anti-aliased rounded corners),
 ## a Dynamic-Island style cutout, a live status bar and a home screen of apps:
 ##
-##   Phone       dialer - emergency calls fail without service
 ##   Clock       analog + digital time
 ##   Flashlight  the LED (same as F)
 ##   Cameras     the school CCTV; the phone turns landscape
@@ -12,7 +11,7 @@ extends Control
 ##   Notes       tonight's objectives, ticked off as they change
 ##
 ## Connectivity (story): the blackout at 11:44 PM took the internet with it, so
-## texts fail and calls need the rooftop. The school Wi-Fi access points run off
+## texts fail and only the rooftop gets a bar of signal. The school Wi-Fi access points run off
 ## the server rack, which is on the UPS: the phone stays on "STI-Students" with
 ## no internet, enough for the Robot Expo app to follow the firmware update on
 ## the server. When WARDEN's circuit dies (breaker or UPS empty) Wi-Fi goes too.
@@ -22,7 +21,7 @@ extends Control
 ## In Cameras nothing scrolls: A/D (or left click) steps through the cameras
 ## of one floor, W/S changes floor, and V switches the whole app on and off from anywhere.
 
-enum Page { HOME, CAMERAS, MESSAGES, THREAD, NOTES, CLOCK, DIALER }
+enum Page { HOME, CAMERAS, MESSAGES, THREAD, NOTES, CLOCK }
 
 const PORTRAIT := Vector2(250.0, 510.0)
 const LANDSCAPE := Vector2(880.0, 440.0)
@@ -45,13 +44,13 @@ const ORANGE := Color(1.0, 0.62, 0.04)
 const PAGE_BG := Color(0.035, 0.035, 0.045)
 const CARD := Color(0.11, 0.11, 0.13)
 
-const APPS: Array[StringName] = [&"phone", &"clock", &"flashlight", &"cameras", &"messages", &"notes"]
+const APPS: Array[StringName] = [&"clock", &"flashlight", &"cameras", &"messages", &"notes"]
 const APP_NAMES: Dictionary = {
-	&"phone": "Phone", &"clock": "Clock", &"flashlight": "Flashlight",
+	&"clock": "Clock", &"flashlight": "Flashlight",
 	&"cameras": "Cameras", &"messages": "Messages", &"notes": "Notes",
 }
 ## APPS from this index on live in the dock.
-const DOCK_FIRST := 2
+const DOCK_FIRST := 1
 const ICON := 40.0
 const COLUMN_X: Array[float] = [14.0, 66.0, 118.0, 170.0]
 
@@ -127,9 +126,6 @@ var _notes_unseen: bool = false
 var _clock_face: AppIcon = null
 var _clock_digital: Label = null
 var _clock_date: Label = null
-# dialer
-var _dial_status: Label = null
-var _call_time: float = -1.0
 # cameras
 var _feed: TextureRect = null
 var _cam_rec: Panel = null
@@ -234,8 +230,6 @@ func confirm() -> void:
 		Page.MESSAGES:
 			SfxSynth.play_ui(self, SfxSynth.click(), -20.0, 1.3)
 			_open_thread(_thread_sel)
-		Page.DIALER:
-			_place_call()
 
 
 ## Right click. False at the home screen (the caller then lowers the phone).
@@ -266,8 +260,6 @@ func _launch(app: StringName) -> void:
 			_open_page(Page.NOTES)
 		&"clock":
 			_open_page(Page.CLOCK)
-		&"phone":
-			_open_page(Page.DIALER)
 
 
 func _open_page(target: Page) -> void:
@@ -286,10 +278,6 @@ func _open_page(target: Page) -> void:
 		Page.NOTES:
 			_notes_unseen = false
 			_refresh_notes()
-		Page.DIALER:
-			_call_time = -1.0
-			_dial_status.text = "Emergency call"
-			_dial_status.add_theme_color_override(&"font_color", DIM)
 	_refresh_icons()
 	_status.visible = target != Page.CAMERAS
 	_indicator.visible = target != Page.CAMERAS
@@ -351,8 +339,6 @@ func _process(delta: float) -> void:
 			_update_cameras()
 		Page.CLOCK:
 			_update_clock()
-		Page.DIALER:
-			_update_call(delta)
 
 
 func _layout(delta: float) -> void:
@@ -409,8 +395,6 @@ func _hint_items() -> Array:
 			return [["WHEEL", "Select"], ["LMB", "Open"], ["RMB", "Back"]]
 		Page.THREAD:
 			return [["WHEEL", "Scroll"], ["RMB", "Back"]]
-		Page.DIALER:
-			return [["LMB", "Call"], ["RMB", "Back"]]
 	return [["RMB", "Back"]]
 
 
@@ -533,31 +517,6 @@ func _is_past_midnight() -> bool:
 
 func _date_text() -> String:
 	return "Saturday, November 15" if _is_past_midnight() else "Friday, November 14"
-
-
-func _update_call(delta: float) -> void:
-	if _call_time < 0.0:
-		return
-	_call_time += delta
-	if _call_time < 2.2:
-		_dial_status.text = "Calling" + ".".repeat(int(_call_time * 3.0) % 4)
-	elif _call_time < 2.3:
-		_dial_status.text = "Call Failed"
-		_dial_status.add_theme_color_override(&"font_color", RED)
-		buzz()
-		_call_time = 2.3
-	elif _call_time > 4.5:
-		_dial_status.text = "No Service"
-		_dial_status.add_theme_color_override(&"font_color", DIM)
-		_call_time = -1.0
-
-
-func _place_call() -> void:
-	if _call_time >= 0.0:
-		return
-	_call_time = 0.0
-	_dial_status.add_theme_color_override(&"font_color", GREEN)
-	SfxSynth.play_ui(self, SfxSynth.click(), -18.0, 1.4)
 
 
 func _battery() -> float:
@@ -941,7 +900,6 @@ func _build() -> void:
 	_pages[Page.THREAD] = _build_thread()
 	_pages[Page.NOTES] = _build_notes()
 	_pages[Page.CLOCK] = _build_clock()
-	_pages[Page.DIALER] = _build_dialer()
 	for key: Page in _pages:
 		(_pages[key] as Control).visible = key == Page.HOME
 	_build_status_bar()
@@ -1302,38 +1260,6 @@ func _build_clock() -> Control:
 	return p
 
 
-func _build_dialer() -> Control:
-	var p := _new_page(true)
-	var number := _label(36, WHITE, 300, HORIZONTAL_ALIGNMENT_CENTER)
-	number.text = "911"
-	_place(p, number, Vector2(0, 46), Vector2(SW, 46))
-	_dial_status = _label(12, DIM, 500, HORIZONTAL_ALIGNMENT_CENTER)
-	_place(p, _dial_status, Vector2(0, 92), Vector2(SW, 18))
-	var keys: Array[String] = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"]
-	var letters: Array[String] = ["", "ABC", "DEF", "GHI", "JKL", "MNO", "PQRS", "TUV", "WXYZ", "", "+", ""]
-	for i in keys.size():
-		var key := Panel.new()
-		key.add_theme_stylebox_override(&"panel", box(Color(0.2, 0.2, 0.22), 27.0))
-		_place(p, key, Vector2(17.0 + (i % 3) * 68.0, 124.0 + (i / 3) * 62.0), Vector2(54, 54))
-		var d := _label(22, WHITE, 400, HORIZONTAL_ALIGNMENT_CENTER)
-		d.text = keys[i]
-		_place(key, d, Vector2(0, 6 if letters[i] != "" else 12), Vector2(54, 28))
-		if letters[i] != "":
-			var l := _label(8, Color(1, 1, 1, 0.75), 700, HORIZONTAL_ALIGNMENT_CENTER)
-			l.text = letters[i]
-			_place(key, l, Vector2(0, 33), Vector2(54, 12))
-	var call := Panel.new()
-	var call_box := box(GREEN, 27.0)
-	call_box.border_color = Color(1, 1, 1, 0.95)
-	call_box.set_border_width_all(2)
-	call.add_theme_stylebox_override(&"panel", call_box)
-	_place(p, call, Vector2(SW * 0.5 - 27.0, 380), Vector2(54, 54))
-	var handset := AppIcon.new()
-	handset.kind = &"handset"
-	_place(call, handset, Vector2(7, 7), Vector2(40, 40))
-	return p
-
-
 # ================================================================ helpers
 
 static func font(weight: int) -> Font:
@@ -1469,7 +1395,7 @@ func _linear(colors: Array, from: Vector2, to: Vector2) -> GradientTexture2D:
 # ================================================================ drawn parts
 
 ## An app icon: rounded-square tile with a vector glyph, a badge and a
-## selection ring. Also draws the big clock face and the call-button handset.
+## selection ring. Also draws the big clock face.
 class AppIcon extends Control:
 	var kind: StringName = &""
 	var lit: bool = false
@@ -1490,9 +1416,6 @@ class AppIcon extends Control:
 		var W := Color(1, 1, 1)
 		if kind == &"clock_face":
 			_clock(c, s * 0.5, true)
-			return
-		if kind == &"handset":
-			_handset(c, u, W)
 			return
 		var bg: Color = _bg()
 		PhoneScreen.rrect(self, full, rad, bg)
@@ -1535,8 +1458,6 @@ class AppIcon extends Control:
 				draw_circle(c + Vector2(0, -13) * u, 2.0 * u, W, true, -1.0, true)
 				PhoneScreen.rrect(self, Rect2(c + Vector2(-14, -2) * u, Vector2(3, 6) * u), 1.0 * u, W)
 				PhoneScreen.rrect(self, Rect2(c + Vector2(11, -2) * u, Vector2(3, 6) * u), 1.0 * u, W)
-			&"phone":
-				_handset(c, u, W)
 			&"clock":
 				_clock(c, 16.0 * u, false)
 		if badge > 0:
@@ -1560,7 +1481,7 @@ class AppIcon extends Control:
 				return Color(1.0, 0.84, 0.32) if lit else Color(0.24, 0.24, 0.27)
 			&"cameras":
 				return Color(0.17, 0.19, 0.24)
-			&"messages", &"phone":
+			&"messages":
 				return PhoneScreen.GREEN
 			&"notes":
 				return Color(0.99, 0.98, 0.95)
@@ -1571,12 +1492,6 @@ class AppIcon extends Control:
 			&"robot":
 				return PhoneScreen.ROBOT_ORANGE
 		return Color(0.3, 0.3, 0.3)
-
-	func _handset(c: Vector2, u: float, col: Color) -> void:
-		var o: Vector2 = c + Vector2(1.5, -1.5) * u
-		draw_arc(o, 8.5 * u, PI * 0.3, PI * 1.2, 24, col, 4.6 * u, true)
-		draw_circle(o + Vector2.from_angle(PI * 0.3) * 8.5 * u, 3.4 * u, col, true, -1.0, true)
-		draw_circle(o + Vector2.from_angle(PI * 1.2) * 8.5 * u, 3.4 * u, col, true, -1.0, true)
 
 	func _clock(c: Vector2, r: float, big: bool) -> void:
 		draw_circle(c, r, Color(0.12, 0.12, 0.14) if big else Color(0.97, 0.97, 0.98), true, -1.0, true)

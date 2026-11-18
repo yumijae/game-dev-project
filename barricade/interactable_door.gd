@@ -125,13 +125,13 @@ func get_interactions(_player: PlayerController) -> Array[Dictionary]:
 func interact(player: PlayerController, action_id: StringName) -> void:
 	match action_id:
 		&"open":
-			set_open(true)
+			set_open(true, player)
 		&"close":
-			set_open(false)
+			set_open(false, player)
 		&"peek":
 			peek_under_door(player)
 		&"rattle":
-			_rattle()
+			_rattle(player)
 
 
 ## Lowers the camera to the gap under the door and reports what stands outside:
@@ -162,7 +162,9 @@ func _describe_far_side(side: float) -> String:
 	return "Only the floor. Nothing is standing outside."
 
 
-func set_open(open: bool) -> void:
+## `by` is whoever worked the handle: Juan's own door noise is his (robots
+## learn where he is, the HUD noise meter shows it); a robot's is the door's.
+func set_open(open: bool, by: Node = null) -> void:
 	if is_broken or open == is_open:
 		return
 	if open and permanently_locked:
@@ -178,12 +180,12 @@ func set_open(open: bool) -> void:
 		get_tree().create_timer(SWING_TIME * 0.85).timeout.connect(func() -> void:
 			if is_inside_tree() and not is_open:
 				SfxSynth.play_at(self, SfxSynth.door_close(), handle, -7.0, randf_range(0.92, 1.06), 26.0))
-	NoiseManager.emit_noise(get_center(), NOISE_OPEN if open else NOISE_CLOSE, &"door_swing", self)
+	NoiseManager.emit_noise(get_center(), NOISE_OPEN if open else NOISE_CLOSE, &"door_swing", by if by != null else self)
 	EventBus.door_state_changed.emit(self)
 
 
-func _rattle() -> void:
-	NoiseManager.emit_noise(get_center(), NOISE_RATTLE, &"door_rattle", self)
+func _rattle(by: Node = null) -> void:
+	NoiseManager.emit_noise(get_center(), NOISE_RATTLE, &"door_rattle", by if by != null else self)
 	SfxSynth.play_at(self, SfxSynth.clatter(), get_center() + Vector3.UP, -12.0, 0.7)
 
 

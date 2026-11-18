@@ -14,6 +14,8 @@ signal rescue_arrived()
 
 # ---------------------------------------------------------------------- noise
 signal noise_emitted(origin: Vector3, radius: float, noise_type: StringName, source: Node)
+## A robot heard a noise Juan made himself (the HUD noise meter turns red).
+signal player_noise_heard(robot: Node)
 
 # --------------------------------------------------------------- player stats
 signal stamina_changed(value: float)
