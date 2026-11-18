@@ -5,6 +5,8 @@ extends StaticBody3D
 ## centre of the opening with its local +Z pointing outdoors. (The class kept
 ## its old name, JalousieWindow, because the AI refers to it everywhere.)
 ##
+## Windows stay shut: Juan cannot slide them open or closed (OPEN is kept
+## only for old saves/scenes).
 ##   OPEN            sashes slid aside - anything can come through quietly
 ##   CLOSED          sashes shut - light still leaks out
 ##   TAPED_BLACKOUT  cartolina taped over the glass - the flashlight cannot leak
@@ -12,9 +14,7 @@ extends StaticBody3D
 
 enum State { OPEN, CLOSED, TAPED_BLACKOUT, SHATTERED }
 
-const LAYER_INTERACT: int = 2
 const LAYER_GLASS: int = 16
-const CRANK_NOISE: float = 4.0
 const SHATTER_NOISE: float = 18.0
 const SMALL_WINDOW_HEIGHT: float = 1.0
 ## Sliding window geometry.
@@ -24,12 +24,7 @@ const SASH_RAIL: float = 0.035       # sash frame section
 const SASH_DEPTH: float = 0.03
 const TRACK_OFFSET: float = 0.018    # each track's offset from the frame centre
 const LATCH_HEIGHT: float = 0.14     # crescent lock above the pull, on the meeting stile
-## Motion, after real aluminium sliders: unlatch, a breakaway tug, a heavy
-## glide on worn rollers with a little judder, a soft knock at the stop.
-const LATCH_TIME: float = 0.16
 const LATCH_OPEN_ANGLE: float = 2.5  # radians the crescent swings to release
-const SLIDE_TIME: float = 0.95
-const STOP_BUMP: float = 0.012       # fraction of travel the sash rebounds off the stop
 const JUDDER: float = 0.0012         # metres of vertical rattle at full speed
 
 @export var width: float = 1.6
@@ -59,7 +54,7 @@ static func create(window_width: float, window_height: float, outward: Vector3, 
 	window.height = window_height
 	window.room_id = room
 	window.basis = Basis(Vector3.UP, atan2(outward.x, outward.z))
-	window.collision_layer = LAYER_INTERACT | LAYER_GLASS
+	window.collision_layer = LAYER_GLASS   # fixed glass: nothing to interact with
 	window.collision_mask = 0
 	var shape := BoxShape3D.new()
 	shape.size = Vector3(window_width, window_height, 0.08)
@@ -210,48 +205,11 @@ func is_breached() -> bool:
 	return state == State.OPEN or state == State.SHATTERED
 
 
-# --------------------------------------------------------------- interactions
-
-func get_interactions(_player: PlayerController) -> Array[Dictionary]:
-	var actions: Array[Dictionary] = []
-	match state:
-		State.CLOSED:
-			actions.append({"id": &"open_left", "label": "Slide the left pane open"})
-			actions.append({"id": &"open_right", "label": "Slide the right pane open"})
-		State.OPEN:
-			actions.append({"id": &"close", "label": "Slide the window shut"})
-		State.SHATTERED:
-			pass
-	return actions
-
-
-func interact(player: PlayerController, action_id: StringName) -> void:
-	match action_id:
-		# Left/right as seen from inside the room: the window's local +Z points
-		# outdoors, so its local -X half is on the right of someone facing it.
-		&"open", &"open_right":
-			open_side = -1
-			_crank(State.OPEN, player)
-		&"open_left":
-			open_side = 1
-			_crank(State.OPEN, player)
-		&"close":
-			_crank(State.CLOSED, player)
-
-
 func set_state(new_state: State) -> void:
 	if state == State.SHATTERED or new_state == state:
 		return
 	state = new_state
 	_apply_state()
-
-
-func _crank(new_state: State, by: Node = null) -> void:
-	if state == State.SHATTERED or new_state == state:
-		return
-	state = new_state
-	_animate_slide()
-	NoiseManager.emit_noise(global_position, CRANK_NOISE, &"jalousie_crank", by if by != null else self)
 
 
 # ------------------------------------------------------------------ Robot API
@@ -286,40 +244,6 @@ func _apply_state() -> void:
 		_tape.visible = state == State.TAPED_BLACKOUT
 
 
-## Animates the sashes to the current open/shut state: unlatch -> slide ->
-## knock on the stop, or slide -> knock -> latch. Gameplay state has already
-## changed; this is only what the player sees and hears.
-func _animate_slide() -> void:
-	if _sashes == null:
-		_apply_state()
-		return
-	if _tween != null:
-		_tween.kill()
-	var open: bool = state == State.OPEN
-	var target: float = 1.0 if open else 0.0
-	var travel: float = absf(target - _slide)
-	_tween = create_tween()
-	if open:
-		_tween.tween_callback(_play.bind(SfxSynth.latch_click(), -14.0))
-		_tween.tween_method(_set_latch, 0.0, 1.0, LATCH_TIME).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-		_tween.tween_interval(0.06)
-	if travel > 0.001:
-		_tween.tween_callback(_play.bind(SfxSynth.window_slide(), -12.0, randf_range(0.92, 1.06)))
-		# Breakaway: the first few percent come slowly while the rollers unstick.
-		var breakaway: float = lerpf(_slide, target, 0.06)
-		_tween.tween_method(_set_slide, _slide, breakaway, SLIDE_TIME * 0.22 * travel).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-		_tween.tween_method(_set_slide, breakaway, target, SLIDE_TIME * 0.78 * travel).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-		# Knock against the stop and a small rebound.
-		var rebound: float = target - signf(target - 0.5) * STOP_BUMP
-		_tween.tween_callback(_play.bind(SfxSynth.knock(), -20.0, 1.7))
-		_tween.tween_method(_set_slide, target, rebound, 0.05).set_ease(Tween.EASE_OUT)
-		_tween.tween_method(_set_slide, rebound, target, 0.12).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	if not open:
-		_tween.tween_interval(0.05)
-		_tween.tween_callback(_play.bind(SfxSynth.latch_click(), -13.0, 0.9))
-		_tween.tween_method(_set_latch, _latch_amount(), 0.0, LATCH_TIME).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-
-
 ## Places every sliding sash (and its glass) `amount` of the way open, with a
 ## little vertical rattle while it is moving.
 func _set_slide(amount: float) -> void:
@@ -351,19 +275,6 @@ func _set_latch(amount: float) -> void:
 		var latch := sash.get_node_or_null("Latch") as Node3D
 		if latch != null:
 			latch.rotation.z = -LATCH_OPEN_ANGLE * amount
-
-
-func _latch_amount() -> float:
-	if _sashes != null:
-		for sash: Node in _sashes.get_children():
-			var latch := sash.get_node_or_null("Latch") as Node3D
-			if latch != null:
-				return -latch.rotation.z / LATCH_OPEN_ANGLE
-	return 0.0
-
-
-func _play(stream: AudioStream, volume_db: float, pitch: float = 1.0) -> void:
-	SfxSynth.play_at(self, stream, global_position, volume_db, pitch, 14.0)
 
 
 static func _box_mesh(size: Vector3, material_key: StringName) -> BoxMesh:

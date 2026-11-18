@@ -11,7 +11,7 @@ const SAMPLE_DIR: String = "res://audio/sfx/"
 const SAMPLES: Dictionary = {
 	&"glass_shatter": 6, &"glass_crunch": 3, &"thud": 5, &"knock": 2,
 	&"latch_click": 4, &"clatter": 4, &"keys_jingle": 3, &"door_open": 2, &"door_close": 5,
-	&"thunder": 1, &"spray": 1, &"rain": 1,
+	&"thunder": 1, &"spray": 1, &"rain": 1, &"pose_gears": 4,
 }
 const LOOPED_SAMPLES: Array[StringName] = [&"rain"]
 
@@ -52,6 +52,26 @@ static func zap() -> AudioStream:
 			var crackle: float = randf_range(-1.0, 1.0) * (0.9 if randf() < 0.08 else 0.25)
 			var env: float = minf(t * 300.0, 1.0) * minf((length - t) * 12.0, 1.0)
 			samples[i] = (buzz + crackle) * env * 0.8
+		return samples)
+
+
+## A taser squeezed with nothing to hit: a short, soft tick-crackle. Low-
+## passed and quiet - it must not hurt when spammed (the full zap() is for a
+## shot that connects).
+static func zap_dry() -> AudioStream:
+	return _cached(&"zap_dry", func() -> PackedFloat32Array:
+		var length: float = 0.16
+		var samples: PackedFloat32Array = _silence(length)
+		var phase: float = 0.0
+		var lp: float = 0.0
+		for i: int in samples.size():
+			var t: float = float(i) / MIX_RATE
+			phase += TAU * 62.0 / MIX_RATE
+			var buzz: float = sin(phase) * 0.5 + sin(phase * 2.0) * 0.2
+			var crackle: float = randf_range(-1.0, 1.0) * (0.5 if randf() < 0.04 else 0.12)
+			lp += ((buzz + crackle) - lp) * 0.18          # one-pole low-pass, ~700 Hz
+			var env: float = minf(t * 400.0, 1.0) * exp(-t * 18.0)
+			samples[i] = lp * env * 0.45
 		return samples)
 
 
@@ -551,6 +571,281 @@ static func screech() -> AudioStreamWAV:
 		return samples)
 
 
+# ------------------------------------------------------------- POSE (mannequin)
+
+## One music-box tine: a bright plucked comb tooth with inharmonic overtones,
+## two copies a few Hz apart so it beats and sounds out of tune.
+static func _tine(t: float, freq: float, decay: float = 6.0) -> float:
+	if t < 0.0:
+		return 0.0
+	var env: float = exp(-t * decay) * minf(t * 3000.0, 1.0)
+	var a: float = sin(TAU * freq * t) * 0.5 + sin(TAU * (freq + 4.0) * t) * 0.35
+	var over: float = sin(TAU * freq * 2.76 * t) * 0.18 * exp(-t * 14.0) + sin(TAU * freq * 5.4 * t) * 0.1 * exp(-t * 30.0)
+	return (a + over) * env
+
+
+## POSE's footfall: no metal ring - a hollow fibreglass mannequin leg knocking
+## the tiles, and the dry tick of a ball joint taking the weight.
+## POSE moving: a burst of clockwork gears turning, ending on a click as it
+## sets. Recorded (JC Sounds, CC BY 4.0 - see CREDITS.md); falls back to the
+## synthesised unfreeze whir if the files are missing.
+static func pose_gears() -> AudioStream:
+	var recorded: AudioStream = _sample(&"pose_gears")
+	if recorded != null:
+		return recorded
+	return pose_unfreeze()
+
+
+static func pose_step(variant: int = -1) -> AudioStreamWAV:
+	var v: int = (randi() if variant < 0 else variant) % 3
+	return _cached(StringName("pose_step_%d" % v), func() -> PackedFloat32Array:
+		var samples: PackedFloat32Array = _silence(0.3)
+		var lo: float = 0.0
+		var lo2: float = 0.0
+		var body: float = randf_range(0.9, 1.12)
+		var tick_at: float = randf_range(0.04, 0.08)
+		for i: int in samples.size():
+			var t: float = float(i) / MIX_RATE
+			var n: float = randf_range(-1.0, 1.0)
+			lo = lerpf(lo, n, 0.35)
+			lo2 = lerpf(lo2, lo, 0.4)
+			var knock: float = (sin(TAU * 310.0 * body * t) * 0.5 + sin(TAU * 870.0 * body * t) * 0.32
+				+ sin(TAU * 1630.0 * body * t) * 0.16) * exp(-t * 55.0)
+			var hollow: float = (lo - lo2) * 1.6 * exp(-t * 60.0)
+			var floor_thump: float = sin(TAU * 95.0 * t) * 0.35 * exp(-t * 30.0)
+			var tick: float = 0.0
+			if t > tick_at and t < tick_at + 0.01:
+				tick = randf_range(-1.0, 1.0) * 0.45 * (1.0 - (t - tick_at) / 0.01)
+			samples[i] = tanh((knock + hollow + floor_thump + tick) * 1.1) * 0.85 * minf(t * 5000.0, 1.0)
+		return samples)
+
+
+## The moment Juan looks away from POSE: a long hissing intake like breath
+## through a plastic mouth, a servo sliding the wrong way (down), and two
+## music-box notes a semitone apart - the booth's red-light/green-light tune,
+## broken.
+static func pose_unfreeze() -> AudioStreamWAV:
+	return _cached(&"pose_unfreeze", func() -> PackedFloat32Array:
+		var length: float = 0.95
+		var samples: PackedFloat32Array = _silence(length)
+		var lo: float = 0.0
+		var lo2: float = 0.0
+		var phase: float = 0.0
+		var gate: float = 1.0
+		for i: int in samples.size():
+			var t: float = float(i) / MIX_RATE
+			var u: float = t / length
+			# Breath: band-passed noise swelling in, fluttering like a throat.
+			var n: float = randf_range(-1.0, 1.0)
+			lo = lerpf(lo, n, 0.22)
+			lo2 = lerpf(lo2, lo, 0.3)
+			var flutter: float = 0.65 + 0.35 * sin(TAU * 11.0 * t + sin(TAU * 2.3 * t) * 3.0)
+			var breath: float = (lo - lo2) * 2.2 * flutter * pow(sin(PI * clampf(u * 1.15, 0.0, 1.0)), 1.5)
+			# Servo dropping in pitch, chopped into stutters.
+			var freq: float = 900.0 * exp(-u * 1.1)
+			phase += TAU * freq / MIX_RATE
+			if i % 600 == 0:
+				gate = 1.0 if randf() < 0.7 else 0.0
+			var servo_tone: float = clampf(sin(phase) * 2.5, -1.0, 1.0) * 0.12 * gate * sin(PI * u)
+			# Broken melody: G6 then F#6, slightly flat.
+			var box: float = _tine(t - 0.04, 1554.0, 5.0) * 0.32 + _tine(t - 0.36, 1462.0, 4.0) * 0.3
+			samples[i] = tanh((breath * 0.55 + servo_tone + box) * 1.3) * 0.85
+		return samples)
+
+
+## POSE caught mid-move: a porcelain crack as every joint locks at once, a
+## short stick-slip creak, and a music-box tooth that jams half-way through
+## its note.
+static func pose_freeze() -> AudioStreamWAV:
+	return _cached(&"pose_freeze", func() -> PackedFloat32Array:
+		var length: float = 0.5
+		var samples: PackedFloat32Array = _silence(length)
+		var lo: float = 0.0
+		var cracks: Array[float] = [0.0, randf_range(0.012, 0.025), randf_range(0.03, 0.05), randf_range(0.06, 0.09)]
+		var phase: float = 0.0
+		for i: int in samples.size():
+			var t: float = float(i) / MIX_RATE
+			var n: float = randf_range(-1.0, 1.0)
+			lo = lerpf(lo, n, 0.5)
+			var crack: float = 0.0
+			for k: int in cracks.size():
+				var dt: float = t - cracks[k]
+				if dt >= 0.0 and dt < 0.02:
+					crack += (n - lo) * exp(-dt * 260.0) * (1.0 if k == 0 else 0.55)
+			var creak: float = 0.0
+			if t > 0.05 and t < 0.22:
+				var w: float = t - 0.05
+				phase += TAU * (620.0 - 900.0 * w) / MIX_RATE
+				var grain: float = 0.5 + 0.5 * signf(sin(TAU * 48.0 * w))
+				creak = sin(phase) * 0.22 * grain * sin(PI * w / 0.17)
+			var jam: float = _tine(t - 0.03, 2030.0, 3.0) * 0.3 * (1.0 - smoothstep(0.2, 0.215, t))
+			samples[i] = tanh((crack * 1.2 + creak + jam) * 1.4) * 0.9
+		return samples)
+
+
+## POSE losing power: the music box winding down - the tune slowing, sagging
+## flat, and stopping on a note that never resolves.
+static func pose_slump() -> AudioStreamWAV:
+	return _cached(&"pose_slump", func() -> PackedFloat32Array:
+		var length: float = 2.4
+		var samples: PackedFloat32Array = _silence(length)
+		# Red light, green light: E6 G6 E6 C6 D6 B5.
+		var notes: Array[float] = [1318.5, 1568.0, 1318.5, 1046.5, 1174.7, 987.8]
+		var starts: Array[float] = []
+		var at: float = 0.0
+		var gap: float = 0.16
+		for k: int in notes.size():
+			starts.append(at)
+			at += gap
+			gap *= 1.45
+		for i: int in samples.size():
+			var t: float = float(i) / MIX_RATE
+			var s: float = 0.0
+			for k: int in notes.size():
+				var sag: float = 1.0 - 0.035 * float(k) - 0.02 * maxf(t - starts[k], 0.0)
+				s += _tine(t - starts[k], notes[k] * sag, 4.0) * 0.3
+			# The spring ratchet clicking slower and slower underneath.
+			var rate: float = 18.0 * exp(-t * 1.2)
+			var click: float = 0.0
+			if fmod(t * rate, 1.0) < 0.04:
+				click = randf_range(-1.0, 1.0) * 0.12 * exp(-t * 0.8)
+			samples[i] = (s + click) * (1.0 - smoothstep(0.85, 1.0, t / length))
+		return samples)
+
+
+# ----------------------------------------------------------------- PROTOTYPE
+
+## PROTOTYPE's footfall: a sub-bass slam you feel through the floor, the
+## chassis clanking on inharmonic, detuned partials, and a grinding knee
+## servo groaning down as it straightens.
+static func proto_step(variant: int = -1) -> AudioStreamWAV:
+	var v: int = (randi() if variant < 0 else variant) % 4
+	return _cached(StringName("proto_step_%d" % v), func() -> PackedFloat32Array:
+		var samples: PackedFloat32Array = _silence(0.65)
+		var lo: float = 0.0
+		var sub_phase: float = 0.0
+		var saw: float = 0.0
+		var hold: float = 0.0
+		var detune: float = randf_range(0.9, 1.1)
+		var grind_at: float = randf_range(0.07, 0.13)
+		var grind_hz: float = randf_range(130.0, 175.0)
+		for i: int in samples.size():
+			var t: float = float(i) / MIX_RATE
+			lo = lerpf(lo, randf_range(-1.0, 1.0), 0.06)
+			sub_phase += TAU * (48.0 - 18.0 * minf(t / 0.2, 1.0)) / MIX_RATE
+			var sub: float = sin(sub_phase) * exp(-t * 8.0)
+			var impact: float = lo * 1.3 * exp(-t * 22.0)
+			var clank: float = (sin(TAU * 211.0 * detune * t) * 0.24 + sin(TAU * 587.0 * detune * t) * 0.2
+				+ sin(TAU * 1093.0 * detune * t) * 0.13 + sin(TAU * 1789.0 * detune * t) * 0.08) * exp(-t * 11.0)
+			var grind: float = 0.0
+			if t > grind_at:
+				var w: float = t - grind_at
+				var f: float = grind_hz * exp(-w * 1.8) * (1.0 + 0.08 * randf_range(-1.0, 1.0))
+				saw = fmod(saw + f / MIX_RATE, 1.0)
+				if i % 4 == 0:
+					hold = (saw * 2.0 - 1.0) + randf_range(-1.0, 1.0) * 0.4
+				grind = hold * 0.2 * sin(PI * clampf(w / 0.4, 0.0, 1.0))
+			samples[i] = tanh((sub + impact + clank + grind) * 1.5) * 0.9 * minf(t * 4000.0, 1.0)
+		return samples)
+
+
+## The buzz PROTOTYPE carries everywhere (seamless two-second loop): a
+## harmonic-rich 100 Hz electrical buzz that swells and sags, arcing crackles,
+## and twice per loop a glitched, voice-like burst - something trying to talk
+## through a shorted speaker.
+static func proto_buzz() -> AudioStreamWAV:
+	return _cached(&"proto_buzz", func() -> PackedFloat32Array:
+		var length: float = 2.0
+		var samples: PackedFloat32Array = _silence(length)
+		var crackles: Array[float] = []
+		for k: int in 9:
+			crackles.append(randf_range(0.05, length - 0.08))
+		var lo: float = 0.0
+		for i: int in samples.size():
+			var t: float = float(i) / MIX_RATE
+			# Every periodic part fits a whole number of cycles into the loop.
+			var swell: float = 0.7 + 0.3 * sin(TAU * 0.5 * t) * sin(TAU * 7.0 * t)
+			var buzz: float = clampf(sin(TAU * 100.0 * t) * 3.0, -1.0, 1.0) * 0.22 + sin(TAU * 200.0 * t) * 0.12 \
+				+ sin(TAU * 300.0 * t) * 0.1 + sin(TAU * 50.0 * t) * 0.2
+			var n: float = randf_range(-1.0, 1.0)
+			lo = lerpf(lo, n, 0.5)
+			var arc: float = 0.0
+			for c: float in crackles:
+				var dt: float = t - c
+				if dt >= 0.0 and dt < 0.05:
+					arc += (n - lo) * exp(-dt * 90.0) * 0.8
+			var voice: float = 0.0
+			for start: float in [0.55, 1.4]:
+				var w: float = t - start
+				if w >= 0.0 and w < 0.22:
+					var glottis: float = 1.0 if fmod(w * 130.0, 1.0) < 0.3 else -0.25
+					var vowel: float = sin(TAU * (650.0 + 450.0 * sin(TAU * 9.0 * w)) * w) * 0.6 + sin(TAU * 1180.0 * w) * 0.35
+					var chop: float = 1.0 if fmod(w * 28.0, 1.0) < 0.65 else 0.0
+					voice += glottis * vowel * chop * sin(PI * w / 0.22) * 0.32
+			samples[i] = tanh((buzz * swell + arc + voice) * 1.4) * 0.75
+		return samples)
+
+
+## PROTOTYPE powering up on its own battery: a grinding groan dragged up from
+## sub-bass, stalling and catching, with arcing, ending in a choked shriek.
+static func proto_wake() -> AudioStreamWAV:
+	return _cached(&"proto_wake", func() -> PackedFloat32Array:
+		var length: float = 2.0
+		var samples: PackedFloat32Array = _silence(length)
+		var saw_a: float = 0.0
+		var saw_b: float = 0.0
+		var ring: float = 0.0
+		var hold: float = 0.0
+		var lo: float = 0.0
+		var stall: float = 1.0
+		for i: int in samples.size():
+			var t: float = float(i) / MIX_RATE
+			var u: float = t / length
+			if i % 1500 == 0:
+				stall = 0.55 if randf() < 0.3 else 1.0
+			var freq: float = 32.0 * pow(5.0, minf(u * 1.25, 1.0)) * stall
+			saw_a = fmod(saw_a + freq / MIX_RATE, 1.0)
+			saw_b = fmod(saw_b + freq * 1.013 / MIX_RATE, 1.0)
+			var groan: float = (saw_a * 2.0 - 1.0) * 0.5 + (saw_b * 2.0 - 1.0) * 0.4
+			var n: float = randf_range(-1.0, 1.0)
+			lo = lerpf(lo, n, 0.5)
+			var arc: float = (n - lo) * 0.6 * (1.0 if fmod(t * 6.3, 1.0) < 0.06 else 0.0)
+			var shriek: float = 0.0
+			if u > 0.62:
+				var w: float = (u - 0.62) / 0.38
+				ring += TAU * (1400.0 + 600.0 * sin(TAU * 4.0 * t)) / MIX_RATE
+				shriek = groan * sin(ring) * 0.7 * sin(PI * w) * (1.0 if fmod(t * 17.0, 1.0) < 0.7 else 0.2)
+			if i % 3 == 0:
+				hold = groan + arc + shriek
+			var env: float = minf(t * 20.0, 1.0) * (1.0 - smoothstep(0.88, 1.0, u))
+			samples[i] = tanh(hold * 2.4) * 0.85 * env
+		return samples)
+
+
+## A spark off PROTOTYPE's torn wiring: a sharp electrical snap, a falling
+## zap and a few trailing crackles.
+static func arc_snap() -> AudioStreamWAV:
+	return _cached(&"arc_snap", func() -> PackedFloat32Array:
+		var samples: PackedFloat32Array = _silence(0.35)
+		var lo: float = 0.0
+		var trail: Array[float] = []
+		for k: int in randi_range(3, 6):
+			trail.append(randf_range(0.03, 0.28))
+		for i: int in samples.size():
+			var t: float = float(i) / MIX_RATE
+			var n: float = randf_range(-1.0, 1.0)
+			lo = lerpf(lo, n, 0.45)
+			var snap: float = (n - lo) * 1.4 * exp(-t * 90.0)
+			var zap: float = clampf(sin(TAU * (1500.0 * exp(-t * 14.0) + 120.0) * t) * 3.0, -1.0, 1.0) * 0.3 * exp(-t * 20.0)
+			var crackle: float = 0.0
+			for c: float in trail:
+				var dt: float = t - c
+				if dt >= 0.0 and dt < 0.015:
+					crackle += (n - lo) * 0.7 * exp(-dt * 300.0)
+			samples[i] = tanh((snap + zap + crackle) * 1.3) * 0.85
+		return samples)
+
+
 ## A robot saying `text` aloud: not words, a vocoder-ish chatter, one buzzing
 ## syllable per vowel group, each through a randomly picked "vowel" filter.
 ## `base_hz` sets the voice, `grit` (0..1) how broken it sounds, `stutter`
@@ -648,7 +943,7 @@ static func _silence(seconds: float) -> PackedFloat32Array:
 	return samples
 
 
-const LOOPED_KEYS: Array[StringName] = [&"hum", &"water", &"rain", &"drone"]
+const LOOPED_KEYS: Array[StringName] = [&"hum", &"water", &"rain", &"drone", &"proto_buzz"]
 
 
 ## Builds (or fetches) a stream. `generator` returns the mono samples.

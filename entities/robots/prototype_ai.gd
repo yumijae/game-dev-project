@@ -145,11 +145,11 @@ func _on_built() -> void:
 	_sparks.position = Vector3(0, 1.45, -0.05)
 	add_child(_sparks)
 	_buzz = AudioStreamPlayer3D.new()
-	_buzz.stream = SfxSynth.server_hum()
+	_buzz.stream = SfxSynth.proto_buzz()
 	_buzz.unit_size = 1.6
 	_buzz.max_distance = 14.0
 	_buzz.volume_db = -14.0
-	_buzz.pitch_scale = 1.9
+	_buzz.pitch_scale = 1.0
 	_buzz.position = Vector3.UP * 1.4
 	add_child(_buzz)
 	_buzz.finished.connect(_buzz.play)
@@ -176,7 +176,7 @@ func _on_activated() -> void:
 	_spark()
 	SfxSynth.play_at(self, SfxSynth.thud(), get_eye_position(), 4.0, 0.5, 30.0)
 	SfxSynth.play_at(self, SfxSynth.metal_creak(), get_eye_position(), 0.0, 0.7, 30.0)
-	SfxSynth.play_at(self, SfxSynth.servo(), get_eye_position(), -4.0, 0.45, 30.0)
+	SfxSynth.play_at(self, SfxSynth.proto_wake(), get_eye_position(), -4.0, 1.0, 30.0)
 	_buzz.play()
 	_wake = 1.0
 	state = State.LISTEN
@@ -338,7 +338,7 @@ func _gait(speed: float, delta: float) -> void:
 	_phase += delta * (4.2 + speed * 1.9)
 	if int(_phase / PI) != half_before and _stride > 0.3:
 		var run_db: float = lerpf(-6.0, 0.0, clampf((speed - WALK_SPEED) / (RUN_SPEED - WALK_SPEED), 0.0, 1.0))
-		SfxSynth.play_at(self, SfxSynth.metal_step(), global_position + Vector3.UP * 0.05, run_db, randf_range(0.72, 0.85), 34.0)
+		SfxSynth.play_at(self, SfxSynth.proto_step(), global_position + Vector3.UP * 0.05, run_db, randf_range(0.88, 1.05), 34.0)
 	model.position.y = absf(cos(_phase)) * 0.035 * _stride
 
 
@@ -480,7 +480,7 @@ func _apply_pose(pose: Dictionary) -> void:
 func _spark() -> void:
 	_sparks.restart()
 	_sparks.emitting = true
-	SfxSynth.play_at(self, SfxSynth.latch_click(), _sparks.global_position, -6.0, randf_range(1.6, 2.2), 14.0)
+	SfxSynth.play_at(self, SfxSynth.arc_snap(), _sparks.global_position, -6.0, randf_range(0.85, 1.2), 14.0)
 
 
 ## Random sparks, and emergency lights stuttering as it passes.

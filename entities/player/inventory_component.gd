@@ -22,12 +22,29 @@ const SLOW_LOAD: float = 6.0
 const SPRINT_LOAD: float = 14.0
 ## Why the last add_item() took less than offered: &"weight" or &"space".
 var last_refusal: StringName = &""
+## Mouse-wheel cycling: the backpack slot (0-5) whose item is borrowed into
+## the active hand, -1 when the hand holds its own item. The hand's own item
+## waits in that slot, so the backpack keeps its order while scrolling.
+var _wheel_slot: int = -1
+var _wheel_hand: int = -1
+var _wheel_busy: bool = false
 
 
 func _init() -> void:
 	slots.resize(TOTAL_SLOTS)
 	for i: int in TOTAL_SLOTS:
 		slots[i] = {}
+
+
+func _ready() -> void:
+	EventBus.inventory_changed.connect(_on_inventory_changed)
+
+
+## Any change not made by the wheel (number keys, pickups, drops, use) makes
+## whatever is in hand the new "own" item.
+func _on_inventory_changed() -> void:
+	if not _wheel_busy:
+		_wheel_slot = -1
 
 
 func is_slot_empty(index: int) -> bool:
@@ -171,6 +188,33 @@ func swap_backpack_with_hand(backpack_index: int) -> bool:
 	slots[active_hand] = slots[index]
 	slots[index] = from_hand
 	EventBus.inventory_changed.emit()
+	return true
+
+
+## Scroll wheel: brings the next (step 1) or previous (step -1) backpack item
+## into the active hand, putting the one there back where it came from. The
+## hand's own item is one stop on the cycle. Returns false if nothing changed.
+func cycle_hand_item(step: int) -> bool:
+	if _wheel_hand != active_hand:
+		_wheel_hand = active_hand
+		_wheel_slot = -1
+	var stops: int = BACKPACK_SLOTS + 1          # -1 (own item) and slots 0-5
+	var cur: int = _wheel_slot + 1
+	var target: int = -2
+	for k: int in range(1, stops):
+		var q: int = posmod(cur + step * k, stops) - 1
+		if q == -1 or not is_slot_empty(HAND_SLOTS + q):
+			target = q
+			break
+	if target == -2:
+		return false
+	_wheel_busy = true
+	if _wheel_slot >= 0:
+		swap_backpack_with_hand(_wheel_slot)
+	_wheel_slot = -1
+	if target >= 0 and swap_backpack_with_hand(target):
+		_wheel_slot = target
+	_wheel_busy = false
 	return true
 
 

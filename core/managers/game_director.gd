@@ -74,7 +74,8 @@ func _ready() -> void:
 ## Each faces into the lab. Later robots get added to ROBOT_SCRIPTS.
 const ROBOT_SCRIPTS: Array[String] = ["res://entities/robots/pose_ai.gd", "res://entities/robots/concierge_ai.gd",
 	"res://entities/robots/scuttle_ai.gd", "res://entities/robots/prototype_ai.gd"]
-const LAB_CENTER := Vector2(6.0, -4.6)
+## Com Sci Lab (#13): the robots face its centre on their docks.
+const LAB_ROOM_ID: int = 13
 
 
 func _spawn_robots() -> void:
@@ -88,7 +89,8 @@ func _spawn_robots() -> void:
 		var robot: RobotBase = load(ROBOT_SCRIPTS[i]).new()
 		holder.add_child(robot)
 		var at: Vector3 = dock.global_position
-		var look := Vector3(LAB_CENTER.x - at.x, 0.0, LAB_CENTER.y - at.z).normalized()
+		var lab: Vector3 = Campus.room_center(LAB_ROOM_ID)
+		var look := Vector3(lab.x - at.x, 0.0, lab.z - at.z).normalized()
 		robot.dock_at(Transform3D(Basis.looking_at(look, Vector3.UP), at))
 	# The CpE group left the lab propped open while setting up; without it the
 	# robots with no hands would never get out.
@@ -244,8 +246,8 @@ func _seal_under_stairs() -> void:
 		flat.roughness = 0.95
 		plaster = flat
 	# Stairwell interiors (inside the walls) and where the landing begins.
-	const LANDING_EDGE: float = -5.6
-	const BACK_WALL: float = -7.875
+	const LANDING_EDGE: float = Campus.Z_MIN + 2.4
+	const BACK_WALL: float = Campus.Z_MIN + 0.125
 	const UNDERSIDE: float = 1.69
 	for span: Vector2 in [Vector2(-11.875, -9.075), Vector2(9.075, 11.875)]:
 		var width: float = span.y - span.x

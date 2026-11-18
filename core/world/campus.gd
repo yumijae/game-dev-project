@@ -11,9 +11,9 @@ const ROOF_FLOOR: int = 4
 const ROOF_Y: float = 15.2
 const X_MIN: float = -12.0
 const X_MAX: float = 12.0
-const Z_MIN: float = -8.0
-const Z_MAX: float = 8.0
-const CORRIDOR_HALF_WIDTH: float = 1.2
+const Z_MIN: float = -8.6
+const Z_MAX: float = 8.6
+const CORRIDOR_HALF_WIDTH: float = 1.8
 const ROOFTOP_ID: int = 28
 const SERVER_ROOM_ID: int = 11
 
@@ -25,38 +25,38 @@ const EAST_STAIR_X1: float = 12.0
 const EAST_STAIR_TOP_FLOOR: int = 4
 
 const ANTENNA_POSITION: Vector3 = Vector3(0.0, 15.2, 0.0)
-const REHAS_GATE_POSITION: Vector3 = Vector3(0.0, 0.0, 7.8)
+const REHAS_GATE_POSITION: Vector3 = Vector3(0.0, 0.0, 8.4)
 const FLOOR_NAMES: Array[String] = ["1F", "2F", "3F", "4F", "Rooftop"]
 
 ## The 27 interior rooms. Room #28 is the open rooftop deck.
 const ROOMS: Array[Dictionary] = [
-	{"id": 1, "floor": 0, "name": "Main Lobby", "type": "lobby", "x0": -3.0, "z0": 1.2, "x1": 3.0, "z1": 8.0},
-	{"id": 2, "floor": 0, "name": "Admissions Office", "type": "admissions", "x0": -12.0, "z0": 1.2, "x1": -3.0, "z1": 8.0},
-	{"id": 3, "floor": 0, "name": "Cashier & Registrar", "type": "cashier", "x0": 3.0, "z0": 1.2, "x1": 12.0, "z1": 8.0},
-	{"id": 4, "floor": 0, "name": "Director's Office", "type": "director", "x0": -9.0, "z0": -8.0, "x1": -3.0, "z1": -1.2},
-	{"id": 5, "floor": 0, "name": "Staff Room", "type": "staff", "x0": -3.0, "z0": -8.0, "x1": 3.0, "z1": -1.2},
-	{"id": 6, "floor": 0, "name": "Records Room", "type": "records", "x0": 3.0, "z0": -8.0, "x1": 9.0, "z1": -1.2},
-	{"id": 7, "floor": 1, "name": "Computer Lab 1", "type": "complab", "x0": -12.0, "z0": 1.2, "x1": 0.0, "z1": 8.0},
-	{"id": 8, "floor": 1, "name": "Computer Lab 2", "type": "complab", "x0": 0.0, "z0": 1.2, "x1": 12.0, "z1": 8.0},
-	{"id": 9, "floor": 1, "name": "Male Restroom", "type": "restroom", "x0": -9.0, "z0": -8.0, "x1": -6.0, "z1": -1.2},
-	{"id": 10, "floor": 1, "name": "Female Restroom", "type": "restroom", "x0": -6.0, "z0": -8.0, "x1": -3.0, "z1": -1.2},
-	{"id": 11, "floor": 1, "name": "Server Room", "type": "server", "x0": -3.0, "z0": -8.0, "x1": 0.0, "z1": -1.2},
-	{"id": 12, "floor": 1, "name": "MIT Office", "type": "mit", "x0": 0.0, "z0": -8.0, "x1": 3.0, "z1": -1.2},
-	{"id": 13, "floor": 1, "name": "Com Sci Lab", "type": "robolab", "x0": 3.0, "z0": -8.0, "x1": 9.0, "z1": -1.2},
-	{"id": 14, "floor": 2, "name": "Room 301", "type": "classroom", "x0": -12.0, "z0": 1.2, "x1": -6.0, "z1": 8.0},
-	{"id": 15, "floor": 2, "name": "Room 302", "type": "classroom", "x0": -6.0, "z0": 1.2, "x1": 0.0, "z1": 8.0},
-	{"id": 16, "floor": 2, "name": "Room 303", "type": "classroom", "x0": 0.0, "z0": 1.2, "x1": 6.0, "z1": 8.0},
-	{"id": 17, "floor": 2, "name": "Room 304", "type": "classroom", "x0": 6.0, "z0": 1.2, "x1": 12.0, "z1": 8.0},
-	{"id": 18, "floor": 2, "name": "Faculty Room", "type": "faculty", "x0": -9.0, "z0": -8.0, "x1": -3.0, "z1": -1.2},
-	{"id": 19, "floor": 2, "name": "Male Restroom", "type": "restroom", "x0": -3.0, "z0": -8.0, "x1": 0.0, "z1": -1.2},
-	{"id": 20, "floor": 2, "name": "Female Restroom", "type": "restroom", "x0": 0.0, "z0": -8.0, "x1": 3.0, "z1": -1.2},
-	{"id": 21, "floor": 2, "name": "Room 305", "type": "classroom", "x0": 3.0, "z0": -8.0, "x1": 9.0, "z1": -1.2},
-	{"id": 22, "floor": 3, "name": "Room 401", "type": "classroom", "x0": -12.0, "z0": 1.2, "x1": -6.0, "z1": 8.0},
-	{"id": 23, "floor": 3, "name": "Room 402", "type": "classroom", "x0": -6.0, "z0": 1.2, "x1": 0.0, "z1": 8.0},
-	{"id": 24, "floor": 3, "name": "Culinary Kitchen", "type": "kitchen", "x0": 0.0, "z0": 1.2, "x1": 12.0, "z1": 8.0},
-	{"id": 25, "floor": 3, "name": "Room 403", "type": "classroom", "x0": -9.0, "z0": -8.0, "x1": 0.0, "z1": -1.2},
-	{"id": 26, "floor": 3, "name": "Pantry", "type": "pantry", "x0": 0.0, "z0": -8.0, "x1": 3.0, "z1": -1.2},
-	{"id": 27, "floor": 3, "name": "Culinary Dining", "type": "dining", "x0": 3.0, "z0": -8.0, "x1": 9.0, "z1": -1.2},
+	{"id": 1, "floor": 0, "name": "Main Lobby", "type": "lobby", "x0": -3.0, "z0": 1.8, "x1": 3.0, "z1": 8.6},
+	{"id": 2, "floor": 0, "name": "Admissions Office", "type": "admissions", "x0": -12.0, "z0": 1.8, "x1": -3.0, "z1": 8.6},
+	{"id": 3, "floor": 0, "name": "Cashier & Registrar", "type": "cashier", "x0": 3.0, "z0": 1.8, "x1": 12.0, "z1": 8.6},
+	{"id": 4, "floor": 0, "name": "Director's Office", "type": "director", "x0": -9.0, "z0": -8.6, "x1": -3.0, "z1": -1.8},
+	{"id": 5, "floor": 0, "name": "Staff Room", "type": "staff", "x0": -3.0, "z0": -8.6, "x1": 3.0, "z1": -1.8},
+	{"id": 6, "floor": 0, "name": "Records Room", "type": "records", "x0": 3.0, "z0": -8.6, "x1": 9.0, "z1": -1.8},
+	{"id": 7, "floor": 1, "name": "Computer Lab 1", "type": "complab", "x0": -12.0, "z0": 1.8, "x1": 0.0, "z1": 8.6},
+	{"id": 8, "floor": 1, "name": "Computer Lab 2", "type": "complab", "x0": 0.0, "z0": 1.8, "x1": 12.0, "z1": 8.6},
+	{"id": 9, "floor": 1, "name": "Male Restroom", "type": "restroom", "x0": -9.0, "z0": -8.6, "x1": -6.0, "z1": -1.8},
+	{"id": 10, "floor": 1, "name": "Female Restroom", "type": "restroom", "x0": -6.0, "z0": -8.6, "x1": -3.0, "z1": -1.8},
+	{"id": 11, "floor": 1, "name": "Server Room", "type": "server", "x0": -3.0, "z0": -8.6, "x1": 0.0, "z1": -1.8},
+	{"id": 12, "floor": 1, "name": "MIT Office", "type": "mit", "x0": 0.0, "z0": -8.6, "x1": 3.0, "z1": -1.8},
+	{"id": 13, "floor": 1, "name": "Com Sci Lab", "type": "robolab", "x0": 3.0, "z0": -8.6, "x1": 9.0, "z1": -1.8},
+	{"id": 14, "floor": 2, "name": "Room 301", "type": "classroom", "x0": -12.0, "z0": 1.8, "x1": -6.0, "z1": 8.6},
+	{"id": 15, "floor": 2, "name": "Room 302", "type": "classroom", "x0": -6.0, "z0": 1.8, "x1": 0.0, "z1": 8.6},
+	{"id": 16, "floor": 2, "name": "Room 303", "type": "classroom", "x0": 0.0, "z0": 1.8, "x1": 6.0, "z1": 8.6},
+	{"id": 17, "floor": 2, "name": "Room 304", "type": "classroom", "x0": 6.0, "z0": 1.8, "x1": 12.0, "z1": 8.6},
+	{"id": 18, "floor": 2, "name": "Faculty Room", "type": "faculty", "x0": -9.0, "z0": -8.6, "x1": -3.0, "z1": -1.8},
+	{"id": 19, "floor": 2, "name": "Male Restroom", "type": "restroom", "x0": -3.0, "z0": -8.6, "x1": 0.0, "z1": -1.8},
+	{"id": 20, "floor": 2, "name": "Female Restroom", "type": "restroom", "x0": 0.0, "z0": -8.6, "x1": 3.0, "z1": -1.8},
+	{"id": 21, "floor": 2, "name": "Room 305", "type": "classroom", "x0": 3.0, "z0": -8.6, "x1": 9.0, "z1": -1.8},
+	{"id": 22, "floor": 3, "name": "Room 401", "type": "classroom", "x0": -12.0, "z0": 1.8, "x1": -6.0, "z1": 8.6},
+	{"id": 23, "floor": 3, "name": "Room 402", "type": "classroom", "x0": -6.0, "z0": 1.8, "x1": 0.0, "z1": 8.6},
+	{"id": 24, "floor": 3, "name": "Culinary Kitchen", "type": "kitchen", "x0": 0.0, "z0": 1.8, "x1": 12.0, "z1": 8.6},
+	{"id": 25, "floor": 3, "name": "Room 403", "type": "classroom", "x0": -9.0, "z0": -8.6, "x1": 0.0, "z1": -1.8},
+	{"id": 26, "floor": 3, "name": "Pantry", "type": "pantry", "x0": 0.0, "z0": -8.6, "x1": 3.0, "z1": -1.8},
+	{"id": 27, "floor": 3, "name": "Culinary Dining", "type": "dining", "x0": 3.0, "z0": -8.6, "x1": 9.0, "z1": -1.8},
 ]
 
 ## Rooms whose corridor wall is a half-wall with wide plate-glass viewing bays.

@@ -89,6 +89,13 @@ mono and levelled for the game (res://audio/sfx).
   https://opengameart.org/content/rain-loopable
   Used as: the rain outside.
 
+- **"Mechanical Pack Vol 1"** by JC Sounds
+  https://opengameart.org/content/jc-sounds-mechanical-pack-vol-1
+  Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).
+  Used as: POSE's clockwork gears when it moves (res://audio/sfx/pose_gears_*.ogg).
+  Changes: slices of "Clockwork Machine - Slow Stutter" each ending on a
+  "Clockwork Gear Small" click, converted to mono, faded and levelled.
+
 ## Fonts
 
 From Google Fonts, bundled in res://fonts with their licence files.

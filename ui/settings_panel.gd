@@ -10,7 +10,7 @@ const PAGES: Array[String] = ["GRAPHICS", "GAME", "AUDIO", "CONTROLS"]
 const CONTROLS: Array = [
 	["W A S D", "Move"], ["Shift", "Sprint"], ["Ctrl", "Crouch"], ["E", "Interact"],
 	["Q", "Next action"], ["F", "Flashlight"], ["Tab", "Raise phone"], ["V", "Cameras app"],
-	["T", "Change footwear"], ["1 - 6", "Backpack to hand"], ["R", "Switch hand"],
+	["T", "Change footwear"], ["1 - 6", "Backpack to hand"], ["Mouse wheel", "Cycle backpack items"], ["R", "Switch hand"],
 	["Left mouse", "Use held item"], ["Right mouse", "Cancel / back"], ["X", "Drop item"], ["G", "Stifle a gasp"],
 	["Esc", "Pause"],
 ]

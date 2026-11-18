@@ -340,12 +340,13 @@ func _scatter_paper() -> void:
 	multimesh.instance_count = PAPER_COUNT
 	for i: int in PAPER_COUNT:
 		var floor_index: int = _rng.randi_range(0, Campus.FLOOR_COUNT - 1)
-		var at := Vector3(_rng.randf_range(-11.6, 11.6), 0.0, _rng.randf_range(-7.6, 7.6))
+		var at := Vector3(_rng.randf_range(Campus.X_MIN + 0.4, Campus.X_MAX - 0.4), 0.0, _rng.randf_range(Campus.Z_MIN + 0.4, Campus.Z_MAX - 0.4))
+		var corr_z: float = Campus.CORRIDOR_HALF_WIDTH - 0.15
 		if _rng.randf() < 0.4:
-			at.z = _rng.randf_range(-1.05, 1.05)
+			at.z = _rng.randf_range(-corr_z, corr_z)
 		at.y = Campus.floor_y(floor_index) + 0.013 + _rng.randf() * 0.004
 		if Campus.stairwell_at(at) != "":
-			at.z = _rng.randf_range(-1.05, 1.05)
+			at.z = _rng.randf_range(-corr_z, corr_z)
 		var basis := Basis(Vector3.UP, _rng.randf() * TAU)
 		multimesh.set_instance_transform(i, Transform3D(basis, at))
 	var instance := MultiMeshInstance3D.new()

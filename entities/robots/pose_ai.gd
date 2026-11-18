@@ -10,22 +10,29 @@ extends RobotBase
 ##     Not while he is staring at the CCTV on his phone.
 ##   - the CCTV feed Juan is looking at on his phone.
 ##
-## Unwatched it is fast and silent apart from plastic footfalls, opens
-## unlocked doors, and snaps to face its target. Every time it is caught it
+## Unwatched it moves in stop-motion: it stands dead still, then - with a
+## grind of clockwork gears - it is suddenly a long stride further on, in a
+## new pose. It opens unlocked doors and snaps to face its target. Every time it is caught it
 ## freezes in a new pose with a faint servo click. It drifts towards Juan when
 ## it has no lead, hunts him once it sees him, and checks noises it hears.
 
 enum State { DOCKED, ROAM, HUNT, INVESTIGATE, OFF }
 
-## Hunting (it has seen or heard Juan) and searching speeds, m/s.
-const SPEED: float = 3.9
-const SEARCH_SPEED: float = 2.2
+## Stop-motion movement. Each hop the body runs HOP_SPEED along its path
+## for HOP_* metres while the visible model stays put, then the model snaps
+## to the new spot; between hops it holds perfectly still for HOLD_*
+## seconds. Average speed: ~2 m/s hunting, ~1 m/s searching.
+const HOP_SPEED: float = 10.0
+const HOP_HUNT: float = 1.8
+const HOP_ROAM: float = 1.4
+const HOLD_HUNT: float = 0.8
+const HOLD_ROAM: float = 1.2
+const HOP_MAX_TIME: float = 0.4
 ## How far each search hop pulls it from where it is towards Juan.
 const DRIFT: float = 0.35
 const NAKED_EYE_RANGE: float = 6.0
 const ROAM_RADIUS: float = 9.0
 const ROAM_REPICK: float = 9.0
-const STEP_INTERVAL: float = 0.32
 const FREEZE_CLICK_RANGE: float = 10.0
 const GIVE_UP_DOOR_TIME: float = 5.0
 const RETREAT_TIME: float = 9.0
@@ -39,7 +46,16 @@ var _servo_ready_ms: int = 0
 
 var _target: Vector3 = Vector3.ZERO
 var _roam_timer: float = 0.0
-var _step_timer: float = 0.0
+## Seconds left standing still before the next hop.
+var _hold_timer: float = 0.0
+## Metres left in the hop in progress (0 = not hopping).
+var _hop_left: float = 0.0
+## Seconds the hop in progress has run (a blocked hop lands after HOP_MAX_TIME).
+var _hop_time: float = 0.0
+## Where the model was left standing when the hop began (world space).
+var _hop_from: Transform3D = Transform3D.IDENTITY
+## Holds the model so it can stay behind while the body hops.
+var _stopmotion: Node3D = null
 var _was_moving: bool = false
 var _door: InteractableDoor = null
 var _door_timer: float = 0.0
@@ -92,6 +108,7 @@ func can_open_doors() -> bool:
 func take_taser() -> bool:
 	if not is_active:
 		return false
+	_land()
 	knock_down()
 	EventBus.ui_notification.emit("POSE drops like a puppet with its strings cut. It isn't moving... for now.", 4.0)
 	return true
@@ -105,6 +122,11 @@ func get_feet_description() -> String:
 
 ## On its dock before midnight: powered down, head bowed.
 func _on_built() -> void:
+	if model != null:
+		_stopmotion = Node3D.new()
+		_stopmotion.name = "StopMotion"
+		add_child(_stopmotion)
+		model.reparent(_stopmotion, false)
 	_set_pose.call_deferred("slump")
 
 
@@ -113,19 +135,20 @@ func _on_activated() -> void:
 	_pick_roam_target()
 	# Rebooted where it lay (after a taser): it straightens up, servos whining.
 	_set_pose("stride")
-	SfxSynth.play_at(self, SfxSynth.servo(), get_eye_position(), -8.0, 0.8, 18.0)
+	SfxSynth.play_at(self, SfxSynth.pose_unfreeze(), get_eye_position(), -8.0, 0.8, 18.0)
 
 
 func _on_shutdown() -> void:
 	state = State.OFF
+	_land()
 	# Power gone: the servos let go and it sags where it stands.
 	_set_pose("slump")
-	SfxSynth.play_at(self, SfxSynth.latch_click(), get_eye_position(), -6.0, 0.4)
+	SfxSynth.play_at(self, SfxSynth.pose_slump(), get_eye_position(), -6.0, 1.0)
 
 
 func _on_attack_landed(fatal: bool) -> void:
 	SfxSynth.play_at(self, SfxSynth.thud(), get_eye_position() - Vector3.UP * 0.5, 2.0, 1.3)
-	SfxSynth.play_at(self, SfxSynth.latch_click(), get_eye_position(), 0.0, 0.6)
+	SfxSynth.play_at(self, SfxSynth.pose_freeze(), get_eye_position(), 0.0, 0.8)
 	if not fatal:
 		# Backs off and waits for the next chance.
 		_retreat_timer = RETREAT_TIME
@@ -140,6 +163,7 @@ func _on_attack_landed(fatal: bool) -> void:
 func _tick(delta: float) -> void:
 	is_observed = _check_observed()
 	if is_observed:
+		_land()
 		if _was_moving:
 			_freeze()
 		_was_moving = false
@@ -150,7 +174,7 @@ func _tick(delta: float) -> void:
 	if not _was_moving and Time.get_ticks_msec() > _servo_ready_ms:
 		# The moment you look away: a whir in the dark.
 		_servo_ready_ms = Time.get_ticks_msec() + 1800
-		SfxSynth.play_at(self, SfxSynth.servo(), get_eye_position(), -11.0, randf_range(0.85, 1.05), 18.0)
+		SfxSynth.play_at(self, SfxSynth.pose_unfreeze(), get_eye_position(), -11.0, randf_range(0.9, 1.05), 18.0)
 	_was_moving = true
 	_retreat_timer = maxf(_retreat_timer - delta, 0.0)
 	_hunch_timer -= delta
@@ -158,13 +182,20 @@ func _tick(delta: float) -> void:
 	# Answering another robot's call: off to open its door (unless it has
 	# Juan in sight - he comes first).
 	if state != State.HUNT and is_helping():
-		help_step(SEARCH_SPEED * 1.4 * get_speed_factor(), delta)
-		face_direction(_desired_direction, delta, 0.0)
-		_footsteps(delta)
+		if _hop_gate(delta):
+			var before: Vector3 = global_position
+			help_step(HOP_SPEED * get_speed_factor(), delta)
+			face_direction(_desired_direction, delta, 0.0)
+			_hop_moved(before, false)
 		return
 	if _handle_door(delta):
+		_land()
 		return
-	var speed: float = (SEARCH_SPEED if state == State.ROAM else SPEED) * get_speed_factor()
+	if not _hop_gate(delta):
+		if _retreat_timer <= 0.0 and try_attack_player():
+			return
+		return
+	var speed: float = HOP_SPEED * get_speed_factor()
 	if stuck_count >= 3:
 		# This way keeps failing: go somewhere else for now.
 		stuck_count = 0
@@ -172,11 +203,12 @@ func _tick(delta: float) -> void:
 		state = State.ROAM
 		_target = random_nav_point(global_position, ROAM_RADIUS)
 		_roam_timer = ROAM_REPICK
+	var before: Vector3 = global_position
 	var arrived: bool = nav_move_to(_target, speed, delta)
 	face_direction(_desired_direction if not arrived else (_target - global_position), delta, 0.0)
 	if state == State.HUNT and knows_where():
 		face_point(last_known, delta, 0.0)
-	_footsteps(delta)
+	_hop_moved(before, arrived)
 	if _retreat_timer <= 0.0 and try_attack_player():
 		return
 	if arrived:
@@ -329,18 +361,51 @@ func _handle_door(delta: float) -> bool:
 	return true
 
 
-func _footsteps(delta: float) -> void:
-	if Vector2(velocity.x, velocity.z).length() < 0.5:
+## Stop-motion gate. While holding it stands perfectly still and returns
+## false; when the hold runs out a hop starts (gears grind, the model is left
+## behind) and it returns true until the hop's distance is covered.
+func _hop_gate(delta: float) -> bool:
+	if _hop_left > 0.0:
+		_hop_time += delta
+		return true
+	velocity.x = 0.0
+	velocity.z = 0.0
+	_hold_timer -= delta
+	if _hold_timer > 0.0:
+		ground_idle(delta)
+		return false
+	_hop_left = HOP_HUNT if state == State.HUNT else HOP_ROAM
+	_hop_time = 0.0
+	_hop_from = _stopmotion.global_transform if _stopmotion != null else global_transform
+	SfxSynth.play_at(self, SfxSynth.pose_gears(), get_eye_position(), -4.0, randf_range(0.78, 0.92), 24.0)
+	return true
+
+
+## Book-keeping after a hop frame: keep the model where it was, and land once
+## the hop's distance is covered (or the path ends).
+func _hop_moved(before: Vector3, arrived: bool) -> void:
+	_hop_left -= Vector2(global_position.x - before.x, global_position.z - before.z).length()
+	if _hop_left <= 0.0 or arrived or _hop_time >= HOP_MAX_TIME:
+		_land(true)
+	elif _stopmotion != null:
+		_stopmotion.global_transform = _hop_from
+
+
+## Ends any hop: the body stops dead and the model snaps to it in a new
+## stride, with a dry plastic footfall.
+func _land(hop_done: bool = false) -> void:
+	var was_hopping: bool = hop_done or _hop_left > 0.0
+	_hop_left = 0.0
+	if _stopmotion != null:
+		_stopmotion.transform = Transform3D.IDENTITY
+	if not was_hopping:
 		return
-	_step_timer -= delta
-	if _step_timer > 0.0:
-		return
-	_step_timer = STEP_INTERVAL
-	# Stop-motion: it does not walk, it changes pose once per footfall. Seen
-	# far off in the dark it jerks from one stride to the next.
+	velocity.x = 0.0
+	velocity.z = 0.0
+	_hold_timer = (HOLD_HUNT if state == State.HUNT else HOLD_ROAM) * randf_range(0.85, 1.2) / get_speed_factor()
 	_left_leads = not _left_leads
 	_set_pose("stride")
-	SfxSynth.play_at(self, SfxSynth.metal_step(), global_position + Vector3.UP * 0.05, -9.0, randf_range(1.15, 1.35), 22.0)
+	SfxSynth.play_at(self, SfxSynth.pose_step(), global_position + Vector3.UP * 0.05, -9.0, randf_range(0.85, 1.0), 22.0)
 
 
 # --------------------------------------------------------------------- poses
@@ -361,7 +426,7 @@ func _freeze() -> void:
 		pose = ["point", "arms_out", "one_up", "lowered", "reach", "stride"].pick_random()
 	_set_pose(pose, true)
 	if get_player_distance() < FREEZE_CLICK_RANGE:
-		SfxSynth.play_at(self, SfxSynth.latch_click(), get_eye_position(), -16.0, randf_range(0.6, 0.8), 12.0)
+		SfxSynth.play_at(self, SfxSynth.pose_freeze(), get_eye_position(), -16.0, randf_range(0.9, 1.1), 12.0)
 
 
 ## Limb directions per pose, in the robot's own frame: -Z is forward, +X its

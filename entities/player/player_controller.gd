@@ -242,11 +242,29 @@ func _unhandled_input(event: InputEvent) -> void:
 		inventory.switch_active_hand()
 	elif event.is_action_pressed(&"drop_item"):
 		drop_active_item()
+	elif event.is_action_pressed(&"inventory_next"):
+		_wheel_cycle(1)
+	elif event.is_action_pressed(&"inventory_prev"):
+		_wheel_cycle(-1)
 	else:
 		for i: int in InventoryComponent.BACKPACK_SLOTS:
 			if event.is_action_pressed("slot_%d" % (i + 1)):
 				inventory.swap_backpack_with_hand(i)
 				break
+
+
+## Mouse wheel over the inventory. Trackpads send bursts of wheel events, so
+## steps closer together than WHEEL_STEP_MS are ignored.
+const WHEEL_STEP_MS: int = 90
+var _last_wheel_ms: int = -1000
+
+
+func _wheel_cycle(step: int) -> void:
+	var now: int = Time.get_ticks_msec()
+	if now - _last_wheel_ms < WHEEL_STEP_MS:
+		return
+	_last_wheel_ms = now
+	inventory.cycle_hand_item(step)
 
 
 ## Eyes on the CCTV: Juan stands still and cannot look around.
@@ -842,6 +860,11 @@ func _spray_extinguisher() -> void:
 const TASER_REACH: float = 1.9
 const TASER_CONE: float = 40.0
 const TASER_NOISE: float = 7.0
+## Squeezing the taser with nothing in reach: at most one dry crackle this
+## often (spamming it used to stack full-volume zaps).
+const TASER_DRY_COOLDOWN_MS: int = 450
+
+var _taser_dry_ready_ms: int = 0
 
 
 ## Jabs the robot in front of Juan, if one is within arm's reach. The taser
@@ -868,8 +891,12 @@ func _fire_taser() -> void:
 			target = robot
 	var tip: Vector3 = eye + forward * 0.55 + Vector3.DOWN * 0.18
 	if target == null:
-		# A dry crackle: nothing in reach, and the shot is kept.
-		SfxSynth.play_at(self, SfxSynth.zap(), tip, -12.0, 1.3, 12.0)
+		# A dry crackle: nothing in reach, and the shot is kept. Rate-limited.
+		var now: int = Time.get_ticks_msec()
+		if now < _taser_dry_ready_ms:
+			return
+		_taser_dry_ready_ms = now + TASER_DRY_COOLDOWN_MS
+		SfxSynth.play_at(self, SfxSynth.zap_dry(), tip, -18.0, randf_range(0.95, 1.05), 8.0)
 		EventBus.ui_notification.emit("Nothing in reach. Get closer.", 1.6)
 		return
 	inventory.remove_item(ItemDB.TASER, 1)
@@ -1122,7 +1149,8 @@ static func _ensure_input_actions() -> void:
 			var key_event := InputEventKey.new()
 			key_event.physical_keycode = code
 			InputMap.action_add_event(action, key_event)
-	var buttons: Dictionary = {&"use_item": MOUSE_BUTTON_LEFT, &"cancel_action": MOUSE_BUTTON_RIGHT}
+	var buttons: Dictionary = {&"use_item": MOUSE_BUTTON_LEFT, &"cancel_action": MOUSE_BUTTON_RIGHT,
+		&"inventory_next": MOUSE_BUTTON_WHEEL_DOWN, &"inventory_prev": MOUSE_BUTTON_WHEEL_UP}
 	for action: StringName in buttons:
 		if InputMap.has_action(action):
 			continue
