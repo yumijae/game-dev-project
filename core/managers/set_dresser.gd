@@ -295,7 +295,8 @@ func _clear_window_glass(school: Node) -> void:
 
 ## The planting outside the ground-floor windows is built as flat mint-green
 ## blocks, which is what you see through the glass from the front offices.
-## Each block is replaced by an overgrown clump of dark shrubs.
+## Each block is replaced by a trimmed, kept-up hedge: rounded clumps that
+## stay just above the planter's rim.
 func _grow_planters(school: Node) -> void:
 	var blocks := school.get_node_or_null("Visual/Mesh_plant") as MeshInstance3D
 	if blocks == null or blocks.mesh == null:
@@ -321,13 +322,13 @@ func _grow_planters(school: Node) -> void:
 			box = box.expand(to_world * faces[i])
 		_rng.seed = hash(box.position.snappedf(0.05))
 		for k: int in int(box.size.x * 22.0):
-			var radius: float = _rng.randf_range(0.11, 0.24)
-			var at := Vector3(_rng.randf_range(box.position.x + 0.08, box.end.x - 0.08),
-				box.position.y + _rng.randf_range(0.05, box.size.y + 0.22),
-				_rng.randf_range(box.position.z + 0.06, box.end.z - 0.06))
-			var squash := Vector3(radius * 2.0, radius * _rng.randf_range(1.3, 2.0), radius * 2.0)
+			var radius: float = _rng.randf_range(0.15, 0.2)
+			var at := Vector3(_rng.randf_range(box.position.x + 0.12, box.end.x - 0.12),
+				box.position.y + _rng.randf_range(box.size.y * 0.6, box.size.y + 0.04),
+				_rng.randf_range(box.position.z + 0.1, box.end.z - 0.1))
+			var squash := Vector3(radius * 2.0, radius * _rng.randf_range(1.0, 1.2), radius * 2.0)
 			transforms.append(Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled_local(squash), at))
-			colours.append(Color(0.05, 0.13, 0.06).lerp(Color(0.12, 0.2, 0.07), _rng.randf()))
+			colours.append(Color(0.08, 0.2, 0.08).lerp(Color(0.14, 0.26, 0.09), _rng.randf()))
 	blocks.visible = false
 	_add_multimesh("Shrubs", clump, transforms, colours)
 

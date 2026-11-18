@@ -63,7 +63,8 @@
 - **"Robot"** by Daniel Gryningstjerna (textured by Heroinfather, animated by Linkle)
   https://sketchfab.com/3d-models/robot-c46bd21f1d284ae0b4bda7ac577448c2
   Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).
-  Used as: PROTOTYPE robot; rescaled, procedural walk/run added (entities/robots/prototype_ai.gd).
+  Used as: PROTOTYPE robot; rescaled, procedural walk/run added (entities/robots/prototype_ai.gd),
+  blood-red tones in the textures recoloured to dark metal.
 
 - Furniture and props from **Poly Haven** (https://polyhaven.com), CC0.
 

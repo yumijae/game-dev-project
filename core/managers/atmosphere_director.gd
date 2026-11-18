@@ -1,17 +1,18 @@
 class_name AtmosphereDirector
 extends Node3D
-## Turns the clean STI building into the place it is at 11:45 PM on a storm
-## night. Everything here is cosmetic and procedural - no gameplay rule reads
-## it, and nothing in it makes a sound a robot (or the player's ears) could
-## mistake for a real cue.
+## Turns the STI building into the place it is at 11:45 PM on a storm night:
+## an old school that is still kept clean, not an abandoned one - the dread
+## comes from the dark, the storm and the sound, not from filth. Everything
+## here is cosmetic and procedural - no gameplay rule reads it, and nothing in
+## it makes a sound a robot (or the player's ears) could mistake for a real cue.
 ##
-##   * decay pass on walls, floors and ceilings (shaders/decay_overlay)
-##   * blood, drag-smear, handprint and claw-mark decals, placed by raycast
-##   * warnings scrawled on chalkboards and restroom mirrors
-##   * papers on the floors, ceiling tiles hanging by their wires
-##   * failing fluorescent tubes in the corridors
+##   * a gentle age pass on walls, floors and ceilings (shaders/decay_overlay):
+##     yellowed paint, faint scuffs, worn floor polish, skirting boards
+##   * one tired fluorescent tube per corridor that flickers now and then
 ##   * a storm: rain, lightning that floods the rooms, thunder
-##   * dust in the flashlight beam and a low drone under everything
+##   * a little dust in the flashlight beam and a low drone under everything
+## (Decals, board/mirror writing, floor litter and hanging ceiling tiles exist
+## below but are switched off per user preference.)
 
 const DECAY_SHADER: Shader = preload("res://shaders/decay_overlay.gdshader")
 const DECAY_MESHES: Array[String] = [
@@ -26,7 +27,7 @@ const MARKER: Color = Color(0.06, 0.06, 0.08)
 const DECAL_COUNT: int = 120
 const DECAL_TEXTURE_SIZE: int = 128
 const PAPER_COUNT: int = 520
-const FLICKER_LIGHTS_PER_FLOOR: int = 2
+const FLICKER_LIGHTS_PER_FLOOR: int = 1
 const CORRIDOR_PANEL_X: Array[float] = [-10.5, -7.5, -4.5, -1.5, 1.5, 4.5, 7.5, 10.5]
 const LIGHTNING_MIN_GAP: float = 20.0
 const LIGHTNING_MAX_GAP: float = 55.0
@@ -89,7 +90,7 @@ func _ready() -> void:
 	_build_flicker_lights()
 	# _write_on_boards() - disabled per user preference (no messages scrawled on
 	# the classroom blackboards or the restroom mirrors)
-	_scatter_paper()
+	# _scatter_paper() - disabled: the school is old but kept clean, no litter
 	# _hang_ceiling_debris() - disabled per user preference (no dangling ceiling panels)
 	_start_audio()
 	_build_dust_and_rain()
@@ -128,6 +129,9 @@ func _apply_decay() -> void:
 		decay.shader = DECAY_SHADER
 		decay.set_shader_parameter(&"baseboard", 1.0 if mesh_name in ["Mesh_int", "Mesh_ext"] else 0.0)
 		decay.set_shader_parameter(&"ceiling_grid", 0.0)
+		decay.set_shader_parameter(&"footprint", Vector2(Campus.X_MAX - 0.02, Campus.Z_MAX - 0.02))
+		decay.set_shader_parameter(&"corridor_half", Campus.CORRIDOR_HALF_WIDTH)
+		decay.set_shader_parameter(&"floor_height", Campus.FLOOR_HEIGHT)
 		var rotten: Material = base.duplicate()
 		rotten.next_pass = decay
 		instance.material_override = rotten
@@ -270,7 +274,7 @@ func _update_flickers(delta: float) -> void:
 			tube.burst -= delta
 			if tube.burst <= 0.0:
 				tube.light.visible = false
-				tube.timer = _rng.randf_range(3.0, 14.0)
+				tube.timer = _rng.randf_range(8.0, 25.0)
 			elif tube.timer <= 0.0:
 				tube.lit = not tube.lit
 				tube.light.light_energy = _rng.randf_range(0.5, 1.3) if tube.lit else 0.0
@@ -522,7 +526,7 @@ func _build_dust_and_rain() -> void:
 	# Dust is lit, not glowing: you only see it where the LED or a candle hits.
 	var dust := CPUParticles3D.new()
 	dust.name = "Dust"
-	dust.amount = 170
+	dust.amount = 60
 	dust.lifetime = 9.0
 	dust.preprocess = 9.0
 	dust.local_coords = false

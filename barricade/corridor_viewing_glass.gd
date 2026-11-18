@@ -157,7 +157,7 @@ static func _get_pane_material() -> StandardMaterial3D:
 		_pane_material.roughness = 0.1
 		var grime := ShaderMaterial.new()
 		grime.shader = load("res://shaders/glass_grime.gdshader")
-		grime.set_shader_parameter(&"grime", 0.12)   # lightly smudged, not filthy
+		grime.set_shader_parameter(&"grime", 0.05)   # cleaned regularly; just a faint film
 		_pane_material.next_pass = grime
 	return _pane_material
 

@@ -303,7 +303,7 @@ static func _material(key: StringName) -> StandardMaterial3D:
 			var grime := ShaderMaterial.new()
 			grime.shader = load("res://shaders/glass_grime.gdshader")
 			# A normal school's windows: a light film, not years of streaks.
-			grime.set_shader_parameter(&"grime", 0.12)
+			grime.set_shader_parameter(&"grime", 0.05)
 			grime.set_shader_parameter(&"sheen", 0.25)
 			material.next_pass = grime
 		&"frame":
