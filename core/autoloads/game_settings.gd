@@ -61,8 +61,6 @@ var fov: float = 80.0
 var jumpscares: bool = true
 ## Robots taunting him out loud (subtitled).
 var taunts: bool = true
-## Juan's own arms and whatever he holds, in the first-person view.
-var show_arms: bool = true
 var master_volume: float = 1.0
 ## Everything happening in the building: footsteps, doors, robots, glass.
 var effects_volume: float = 1.0
@@ -291,7 +289,6 @@ func _load() -> void:
 	fov = clampf(float(file.get_value("game", "fov", fov)), FOV_MIN, FOV_MAX)
 	jumpscares = bool(file.get_value("game", "jumpscares", jumpscares))
 	taunts = bool(file.get_value("game", "taunts", taunts))
-	show_arms = bool(file.get_value("game", "show_arms", show_arms))
 	master_volume = clampf(float(file.get_value("audio", "master_volume", master_volume)), 0.0, 1.0)
 	effects_volume = clampf(float(file.get_value("audio", "effects_volume", effects_volume)), 0.0, 1.0)
 	ambience_volume = clampf(float(file.get_value("audio", "ambience_volume", ambience_volume)), 0.0, 1.0)
@@ -313,7 +310,6 @@ func save() -> void:
 	file.set_value("game", "fov", fov)
 	file.set_value("game", "jumpscares", jumpscares)
 	file.set_value("game", "taunts", taunts)
-	file.set_value("game", "show_arms", show_arms)
 	file.set_value("audio", "master_volume", master_volume)
 	file.set_value("audio", "effects_volume", effects_volume)
 	file.set_value("audio", "ambience_volume", ambience_volume)

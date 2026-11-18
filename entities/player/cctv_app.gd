@@ -43,7 +43,6 @@ func _ready() -> void:
 	_camera.fov = FEED_FOV
 	_camera.near = 0.05
 	_camera.far = 40.0
-	_camera.cull_mask &= ~Viewmodel.LAYER
 	_camera.environment = _night_vision()
 	_viewport.add_child(_camera)
 	# The building is instanced before the player; scan once everything exists.

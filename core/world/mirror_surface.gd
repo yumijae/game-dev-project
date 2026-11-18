@@ -40,7 +40,7 @@ func _ready() -> void:
 	_viewport.positional_shadow_atlas_size = 2048
 	add_child(_viewport)
 	_camera = Camera3D.new()
-	_camera.cull_mask = 0xFFFFF & ~GLASS_LAYER & ~Viewmodel.LAYER
+	_camera.cull_mask = 0xFFFFF & ~GLASS_LAYER
 	_camera.keep_aspect = Camera3D.KEEP_HEIGHT
 	_viewport.add_child(_camera)
 	_camera.current = true

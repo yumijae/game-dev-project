@@ -59,7 +59,6 @@ func play(robot: RobotBase, on_done: Callable) -> void:
 	_camera.top_level = true
 	_camera.fov = view.fov
 	_camera.near = 0.02
-	_camera.cull_mask &= ~Viewmodel.LAYER
 	add_child(_camera)
 	_camera.global_transform = view.global_transform
 	_camera.current = true
