@@ -26,16 +26,29 @@ const PANIC_THRESHOLDS: Array[int] = [30, 35, 60, 70, 80, 85, 95]
 const TIER_LIMITS: Array[float] = [30.0, 60.0, 85.0]
 const TIER_NAMES: Array[String] = ["Grounded", "Uneasy", "Rattled", "Terror"]
 
-## Pitch dark is most of the building: at 0.3 a player sneaking with the
-## light off hit shaky hands in four minutes and gasping in five, with no way
-## back short of turning the light on. Now about ten minutes to 70.
+## Pitch dark is most of the building. It sets a resting level instead of
+## climbing for ever: alone in the dark, fear settles at PANIC_DARK_FLOOR
+## (creeping up to it at PANIC_DARKNESS_RATE, easing down to it at
+## PANIC_DARK_RECOVERY). Light lets it fall to nothing, hiding fastest.
 const PANIC_DARKNESS_RATE: float = 0.12
+const PANIC_DARK_FLOOR: float = 25.0
+const PANIC_DARK_RECOVERY: float = 0.3
+const PANIC_RECOVERY_RATE: float = 0.8
 ## Shut in a hiding spot with nothing close: the breathing slows.
 const PANIC_HIDING_RECOVERY: float = 0.5
 const PANIC_BLEEDING_RATE: float = 0.4
 const PANIC_THREAT_RATE: float = 7.0
+## How far a robot on Juan's floor is felt, measured the way sound travels
+## (NoiseManager.travel_distance): straight when nothing is between them,
+## otherwise round the corridors or muffled through the wall.
 const PANIC_THREAT_RADIUS: float = 9.0
-const PANIC_RECOVERY_RATE: float = 0.8
+## Seconds between threat checks (the check may path-find).
+const THREAT_CHECK_INTERVAL: float = 0.15
+## A chase is over once no robot has seen or heard Juan for this long.
+const CHASE_LOST_TIME: float = 8.0
+const RELIEF_CHASE_LOST: float = 15.0
+## The Master Gate Key, a code note, the gate's chain cut: the way out is closer.
+const RELIEF_PROGRESS: float = 10.0
 const PANIC_MIRROR_SPIKE: float = 15.0
 const MIRROR_COOLDOWN: float = 10.0
 
@@ -73,14 +86,34 @@ var is_hidden: bool = false
 var _body: Node3D = null
 var _breath_timer: float = 0.0
 var _mirror_cooldown: float = 0.0
+var _threat: float = 0.0
+var _threat_timer: float = 0.0
+## Seconds since a robot last saw or heard Juan; < 0 while no chase is on.
+var _since_contact: float = -1.0
+## Progress already rewarded once (key, each code note, the chain).
+var _relieved: Dictionary = {}
 
 
 func _ready() -> void:
 	_body = get_parent() as Node3D
+	# Heard mid-chase: it still has him.
+	EventBus.player_noise_heard.connect(func(_robot: Node) -> void:
+		if _since_contact >= 0.0:
+			_since_contact = 0.0)
+	EventBus.item_picked_up.connect(_on_item_picked_up)
+	EventBus.gate_breach_progress.connect(_on_gate_breach_progress)
+	# Code notes are not in every build of the school yet.
+	if EventBus.has_signal(&"gate_code_hint_found"):
+		EventBus.connect(&"gate_code_hint_found", _on_code_hint_found)
 
 
 func _process(delta: float) -> void:
 	_mirror_cooldown = maxf(_mirror_cooldown - delta, 0.0)
+	_threat_timer -= delta
+	if _threat_timer <= 0.0:
+		_threat_timer = THREAT_CHECK_INTERVAL
+		_threat = _get_threat_pressure()
+	_update_chase(delta)
 	_update_panic(delta)
 	_update_breathing(delta)
 
@@ -166,34 +199,97 @@ func roll_fumble() -> bool:
 
 
 func _update_panic(delta: float) -> void:
-	var rate: float = 0.0
-	# Hidden, the dark is cover, not a threat.
-	if in_darkness and not is_hidden:
-		rate += PANIC_DARKNESS_RATE
+	var rise: float = 0.0
 	if is_bleeding:
-		rate += PANIC_BLEEDING_RATE
-	var threat: float = _get_threat_pressure()
-	rate += threat * PANIC_THREAT_RATE
-	if rate <= 0.0:
-		rate = -PANIC_RECOVERY_RATE
-	elif is_hidden and threat <= 0.0:
-		rate -= PANIC_HIDING_RECOVERY
-	if rate != 0.0:
-		_set_panic(panic + rate * delta)
+		rise += PANIC_BLEEDING_RATE
+	rise += _threat * PANIC_THREAT_RATE
+	if rise > 0.0:
+		# The dark makes a wound or a robot worse; hiding takes the edge off
+		# a wound while nothing is near.
+		if in_darkness and not is_hidden:
+			rise += PANIC_DARKNESS_RATE
+		if is_hidden and _threat <= 0.0:
+			rise -= PANIC_HIDING_RECOVERY
+		_set_panic(panic + rise * delta)
+		return
+	# Nothing pushing: fear settles towards where it rests here.
+	var resting: float = 0.0
+	var speed: float = PANIC_RECOVERY_RATE
+	if is_hidden:
+		# Hidden, the dark is cover, not a threat.
+		speed += PANIC_HIDING_RECOVERY
+	elif in_darkness:
+		resting = PANIC_DARK_FLOOR
+		speed = PANIC_DARK_RECOVERY if panic > resting else PANIC_DARKNESS_RATE
+	_set_panic(move_toward(panic, resting, speed * delta))
 
 
-## 0..1 for the closest active robot within 9 m.
+## 0..1 for the closest active robot Juan can sense: on his own floor and
+## within PANIC_THREAT_RADIUS as sound travels, so one beyond a wall counts
+## only by the way round, and one on another floor never does.
 func _get_threat_pressure() -> float:
-	if _body == null:
+	if _body == null or not _body.is_inside_tree():
 		return 0.0
+	var here: int = Campus.floor_from_y(_body.global_position.y)
+	var ears: Vector3 = _body.global_position + Vector3.UP * 1.5
+	if _body.has_method(&"get_head_position"):
+		ears = _body.call(&"get_head_position")
 	var pressure: float = 0.0
 	for node: Node in get_tree().get_nodes_in_group(&"hostile_presence"):
 		var threat := node as Hostile
 		if threat == null or not threat.is_threatening():
 			continue
-		var distance: float = threat.global_position.distance_to(_body.global_position)
+		if Campus.floor_from_y(threat.global_position.y) != here:
+			continue
+		var origin: Vector3 = threat.global_position
+		var flat: float = Vector2(ears.x - origin.x, ears.z - origin.z).length()
+		if flat >= PANIC_THREAT_RADIUS:
+			continue
+		var distance: float = NoiseManager.travel_distance(_body, ears, origin, flat)
 		pressure = maxf(pressure, 1.0 - distance / PANIC_THREAT_RADIUS)
 	return clampf(pressure, 0.0, 1.0)
+
+
+# --------------------------------------------------------------------- relief
+
+## A chase starts when a robot sees Juan and ends, with relief, once every
+## robot has lost him: none has seen or heard him for CHASE_LOST_TIME and
+## none is close.
+func _update_chase(delta: float) -> void:
+	for node: Node in get_tree().get_nodes_in_group(&"hostile_presence"):
+		var robot := node as RobotBase
+		if robot != null and robot.is_threatening() and robot.saw_player_recently():
+			_since_contact = 0.0
+			return
+	if _since_contact < 0.0:
+		return
+	_since_contact += delta
+	if _since_contact >= CHASE_LOST_TIME and _threat <= 0.0:
+		_since_contact = -1.0
+		reduce_panic(RELIEF_CHASE_LOST)
+
+
+## Each piece of progress calms him once a night.
+func _relieve_once(key: String) -> void:
+	if _relieved.has(key):
+		return
+	_relieved[key] = true
+	reduce_panic(RELIEF_PROGRESS)
+
+
+func _on_item_picked_up(item_id: StringName) -> void:
+	if item_id == ItemDB.REHAS_KEY:
+		_relieve_once("gate_key")
+
+
+func _on_code_hint_found(index: int, _digit: int) -> void:
+	_relieve_once("code_note_%d" % index)
+
+
+func _on_gate_breach_progress(_ratio: float) -> void:
+	var gate := get_tree().get_first_node_in_group(&"rehas_gate") as RehasGate
+	if gate != null and gate.chain_progress >= RehasGate.CHAIN_TIME:
+		_relieve_once("gate_chain")
 
 
 func _set_panic(value: float) -> void:

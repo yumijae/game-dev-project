@@ -48,6 +48,13 @@ const SPEAKER_PREFIX: Dictionary = {
 const PANIC_COLORS: Array[Color] = [
 	Color(0.56, 0.55, 0.52), Color(0.72, 0.6, 0.42), Color(0.78, 0.38, 0.22), Color(0.86, 0.22, 0.16),
 ]
+## Where fear starts to bite, marked on its bar. The shaky-hands tick is the
+## one in ember: past it, every action is slow and can be fumbled.
+const FEAR_TICKS: Array[float] = [
+	HallucinationManager.VIBRATION_PANIC, HallucinationManager.SERVO_PANIC,
+	PlayerStats.SHAKY_HANDS_THRESHOLD, HallucinationManager.WHISPER_PANIC,
+]
+const FEAR_PULSE_TIME: float = 0.6
 const SLOT_KEYS: Array[String] = ["L", "R", "1", "2", "3", "4", "5", "6"]
 
 @export var player_path: NodePath
@@ -63,6 +70,10 @@ var _objective: Label = null
 var _stamina_bar: ProgressBar = null
 var _panic_bar: ProgressBar = null
 var _panic_label: Label = null
+## Under the fear bar: what fear is doing to him right now.
+var _fear_effect: Label = null
+## Threshold (int) -> its tick on the fear bar.
+var _fear_ticks: Dictionary = {}
 var _battery_bar: ProgressBar = null
 var _stat_rows: Dictionary = {}
 var _status: Label = null
@@ -110,6 +121,7 @@ func _ready() -> void:
 	EventBus.objective_updated.connect(_on_objective_updated)
 	EventBus.stamina_changed.connect(func(value: float) -> void: _stamina_bar.value = value)
 	EventBus.panic_changed.connect(_on_panic_changed)
+	EventBus.panic_threshold_crossed.connect(_on_panic_threshold_crossed)
 	EventBus.phone_battery_changed.connect(func(percent: float) -> void: _battery_bar.value = percent)
 	EventBus.inventory_changed.connect(_on_inventory_changed)
 	EventBus.ui_prompt_changed.connect(_on_prompt_changed)
@@ -227,6 +239,7 @@ func _build() -> void:
 	_stamina_bar = _stat_row(stats, &"stamina", "Breath", BONE, 100.0)
 	_panic_bar = _stat_row(stats, &"panic", "Fear", PANIC_COLORS[0], 0.0)
 	_panic_label = (_stat_rows[&"panic"] as Control).get_child(0) as Label
+	_build_fear_marks()
 	_battery_bar = _stat_row(stats, &"battery", "Phone", ASH, PlayerStats.STARTING_BATTERY)
 
 	# The reticle: a dot, or a ring over something you can use.
@@ -342,6 +355,40 @@ func _build() -> void:
 	hint.text = "R     BEGIN THE NIGHT AGAIN          ESC     MAIN MENU"
 
 
+## Hairline ticks across the fear bar, and the line naming the effect.
+func _build_fear_marks() -> void:
+	for threshold: float in FEAR_TICKS:
+		var tick := ColorRect.new()
+		tick.color = EMBER if threshold == PlayerStats.SHAKY_HANDS_THRESHOLD else Color(ASH, 0.8)
+		tick.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tick.anchor_left = threshold / 100.0
+		tick.anchor_right = threshold / 100.0
+		tick.offset_left = -0.5
+		tick.offset_right = 0.5
+		tick.offset_top = -2.0
+		tick.offset_bottom = 4.0
+		tick.pivot_offset = Vector2(0.5, 3.0)
+		_panic_bar.add_child(tick)
+		_fear_ticks[int(threshold)] = tick
+	var heading: Label = _panic_label
+	_fear_effect = _label(_stat_rows[&"panic"], heading.get_theme_font_size(&"font_size"), ASH, _font_italic)
+
+
+## The worst thing fear is doing to him, or "" below the first tick.
+static func fear_effect_name(value: float) -> String:
+	if value >= HallucinationManager.GASP_PANIC:
+		return "Gasping for air"
+	if value >= HallucinationManager.WHISPER_PANIC:
+		return "Hearing things"
+	if value > PlayerStats.SHAKY_HANDS_THRESHOLD:
+		return "Hands shaking"
+	if value >= HallucinationManager.SERVO_PANIC:
+		return "Jumping at sounds"
+	if value >= HallucinationManager.VIBRATION_PANIC:
+		return "On edge"
+	return ""
+
+
 func _label(parent: Control, font_size: int, color: Color, font: Font) -> Label:
 	var label := Label.new()
 	label.add_theme_font_override("font", font)
@@ -446,6 +493,22 @@ func _on_panic_changed(value: float, tier: int) -> void:
 	_panic_label.text = "Fear  -  %s" % PlayerStats.TIER_NAMES[tier]
 	_panic_label.add_theme_color_override("font_color", PANIC_COLORS[tier])
 	_panic_bar.add_theme_stylebox_override("fill", _flat(PANIC_COLORS[tier]))
+	_fear_effect.text = fear_effect_name(value)
+	_fear_effect.add_theme_color_override("font_color",
+		EMBER if value > PlayerStats.SHAKY_HANDS_THRESHOLD else ASH)
+
+
+## A marked threshold crossed either way: its tick swells and settles, and
+## the effect line flares.
+func _on_panic_threshold_crossed(threshold: int, _rising: bool) -> void:
+	var tick: ColorRect = _fear_ticks.get(threshold)
+	if tick == null:
+		return
+	var tween: Tween = tick.create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tick.scale = Vector2(3.0, 2.5)
+	tween.tween_property(tick, "scale", Vector2.ONE, FEAR_PULSE_TIME)
+	_fear_effect.modulate = Color(1.6, 1.6, 1.6, 1.0)
+	tween.parallel().tween_property(_fear_effect, "modulate", Color.WHITE, FEAR_PULSE_TIME)
 
 
 func _refresh_status() -> void:
