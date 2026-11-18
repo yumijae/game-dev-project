@@ -126,6 +126,9 @@ func _ready() -> void:
 
 ## Puts one guaranteed item in its room, on the kind of spot that suits it.
 func _place(item_id: StringName, count: int, markers: Array, room_id: int, rng: RandomNumberGenerator) -> void:
+	if item_id == ItemDB.REHAS_KEY:
+		_place_key(markers, room_id, rng)
+		return
 	var wants_floor: bool = ItemDB.is_hands_only(item_id) or item_id in FLOOR_ITEMS
 	var radius: float = _footprint(item_id)
 	# First choice: a marker of the right kind. Second: any free marker, for
@@ -157,6 +160,126 @@ func _place(item_id: StringName, count: int, markers: Array, room_id: int, rng: 
 	# The room has no suitable marker left: find a clear patch of its floor.
 	var spot: Dictionary = _free_floor_spot(item_id, room_id, rng)
 	_spawn(item_id, count, spot["position"], spot["yaw"])
+
+
+# ---------------------------------------------------------------- the key
+# The Master Gate Key is 8 cm long: anything over or beside it hides it. It
+# only goes where it lies in the open - nothing above it (no shelf board, no
+# desk top), no prop, clutter, chair or other item on or close to it - and
+# where Juan can reach it.
+
+## Free space kept round the key (metres) and above it.
+const KEY_MARGIN: float = 0.12
+const KEY_HEADROOM: float = 0.5
+
+## Boxes of every small visual thing (props, monitors, shelf clutter,
+## set-dressing multimeshes), built once.
+var _key_blockers: Array[AABB] = []
+var _key_blockers_ready: bool = false
+
+
+func _place_key(markers: Array, room_id: int, rng: RandomNumberGenerator) -> void:
+	var offsets: Array[Vector3] = [Vector3.ZERO]
+	for reach: float in [0.15, 0.3, 0.45]:
+		for step: int in 8:
+			var angle: float = TAU * float(step) / 8.0
+			offsets.append(Vector3(cos(angle) * reach, 0.0, sin(angle) * reach))
+	for i: int in markers.size():
+		var marker: Marker3D = markers[i]
+		var on_floor: bool = _is_floor_marker(marker, room_id)
+		for offset: Vector3 in offsets:
+			var at: Vector3 = marker.global_position + offset
+			var facing: float = NAN
+			if on_floor:
+				if _near_door(at):
+					continue
+				# Loose mid-floor looks dropped by the builder: the foot of a wall.
+				var snapped: Dictionary = _against_wall(at, ItemDB.REHAS_KEY, room_id)
+				if snapped.is_empty():
+					continue
+				at = snapped["position"]
+				facing = snapped["yaw"]
+			elif not _on_same_surface(at, marker.global_position.y):
+				continue
+			if _key_spot_clear(at) and _can_be_reached(at):
+				markers.remove_at(i)
+				_spawn(ItemDB.REHAS_KEY, 1, at, facing)
+				return
+	# No marker works: the foot of any wall in the room that is clear.
+	var room: Dictionary = Campus.room_by_id(room_id)
+	if not room.is_empty():
+		var level: float = Campus.room_center(room_id).y
+		for _attempt: int in 120:
+			var probe := Vector3(rng.randf_range(float(room["x0"]) + 0.5, float(room["x1"]) - 0.5), level,
+				rng.randf_range(float(room["z0"]) + 0.5, float(room["z1"]) - 0.5))
+			if not _has_floor(probe):
+				continue
+			var snapped: Dictionary = _against_wall(probe, ItemDB.REHAS_KEY, room_id)
+			if not snapped.is_empty() and _key_spot_clear(snapped["position"]):
+				_spawn(ItemDB.REHAS_KEY, 1, snapped["position"], snapped["yaw"])
+				return
+	push_warning("ItemSpawner: no clear spot for the key in room %d" % room_id)
+	var spot: Dictionary = _free_floor_spot(ItemDB.REHAS_KEY, room_id, rng)
+	_spawn(ItemDB.REHAS_KEY, 1, spot["position"], spot["yaw"])
+
+
+## The surface under `at` is at the marker's height (not off a table edge).
+func _on_same_surface(at: Vector3, height: float) -> bool:
+	var query := PhysicsRayQueryParameters3D.create(at + Vector3.UP * 0.05, at + Vector3.DOWN * 0.05, SOLID_MASK)
+	var hit: Dictionary = get_world_3d().direct_space_state.intersect_ray(query)
+	return not hit.is_empty() and absf((hit["position"] as Vector3).y - height) < 0.03
+
+
+## Nothing solid or visible on, over or crowding the key at `at`.
+func _key_spot_clear(at: Vector3) -> bool:
+	# Nothing solid in the column above it (a shelf board, a desk top).
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(0.1, KEY_HEADROOM, 0.1)
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = shape
+	query.transform = Transform3D(Basis.IDENTITY, at + Vector3.UP * (0.03 + KEY_HEADROOM * 0.5))
+	query.collision_mask = SOLID_MASK
+	if not get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty():
+		return false
+	# No other item close by.
+	if _is_crowded(at, _footprint(ItemDB.REHAS_KEY) + KEY_MARGIN):
+		return false
+	# No visual prop over or beside it. The column starts just above the
+	# surface so the desk or floor it lies on does not count.
+	var column := AABB(at + Vector3(-0.05 - KEY_MARGIN, 0.012, -0.05 - KEY_MARGIN),
+		Vector3(0.1 + KEY_MARGIN * 2.0, KEY_HEADROOM, 0.1 + KEY_MARGIN * 2.0))
+	for box: AABB in _get_key_blockers():
+		if box.intersects(column):
+			return false
+	return true
+
+
+func _get_key_blockers() -> Array[AABB]:
+	if _key_blockers_ready:
+		return _key_blockers
+	_key_blockers_ready = true
+	var scene: Node = get_tree().current_scene
+	for node: Node in scene.find_children("*", "GeometryInstance3D", true, false):
+		var geometry := node as GeometryInstance3D
+		if is_ancestor_of(geometry) or not geometry.is_visible_in_tree():
+			continue
+		if geometry is MultiMeshInstance3D:
+			var multimesh: MultiMesh = (geometry as MultiMeshInstance3D).multimesh
+			if multimesh == null or multimesh.mesh == null:
+				continue
+			var unit: AABB = multimesh.mesh.get_aabb()
+			for i: int in multimesh.instance_count:
+				_add_key_blocker(geometry.global_transform * multimesh.get_instance_transform(i) * unit)
+		elif geometry is MeshInstance3D and (geometry as MeshInstance3D).mesh != null:
+			_add_key_blocker(geometry.global_transform * (geometry as MeshInstance3D).mesh.get_aabb())
+	return _key_blockers
+
+
+## Only things of furniture size or smaller: the merged walls and floors span
+## whole storeys and would block everywhere.
+func _add_key_blocker(box: AABB) -> void:
+	if maxf(box.size.x, box.size.z) <= 2.5 and box.size.y <= 2.5 and box.size.y > 0.005:
+		_key_blockers.append(box)
 
 
 ## `at` if no small prop covers it, else the nearest clear spot on the same
@@ -197,7 +320,9 @@ func _inside_clutter(at: Vector3) -> bool:
 
 func _spawn(item_id: StringName, count: int, at: Vector3, facing: float) -> void:
 	WorldItem.spawn(self, item_id, count, at, facing)
-	_placed.append([at, _footprint(item_id)])
+	# Nothing set down later may crowd the key either.
+	var margin: float = KEY_MARGIN if item_id == ItemDB.REHAS_KEY else 0.0
+	_placed.append([at, _footprint(item_id) + margin])
 
 
 ## Half the widest side of the item, as seen from above.

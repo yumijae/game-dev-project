@@ -18,16 +18,21 @@ extends RobotBase
 enum State { DOCKED, ROAM, INVESTIGATE, CHASE, OFF }
 
 const ROAM_SPEED: float = 1.8
-const INVESTIGATE_SPEED: float = 3.0
-## 3.7 m/s (4.6 by 5 AM): faster than Juan walks, well short of his sprint.
-## It was 4.2 (5.2 late on, nearly his 5.6 sprint) - with no door stopping
-## it, a chase could not be won.
-const CHASE_SPEED: float = 3.7
+const INVESTIGATE_SPEED: float = 2.5
+## 3.2 m/s (4.0 by 5 AM): just under Juan's walk early on, well short of his
+## sprint late. Nothing else keeps it out (doors, stairs), so outrunning it
+## has to be possible: at 3.7 (4.6 late) it caught a walking Juan from
+## anywhere and only a long sprint shook it.
+const CHASE_SPEED: float = 3.2
 ## How long it scratches at a door gap before it squeezes under: a warning
 ## you can hear, and a moment to get a heavy prop across the gap.
-const DIG_TIME: float = 1.5
+const DIG_TIME: float = 2.6
 const SQUEEZE_TIME: float = 1.3
-const LOSE_TIME: float = 3.0
+## Out of sight this long and it stops chasing and goes to look instead.
+const LOSE_TIME: float = 2.0
+## Sounds fainter than this it ignores; it used to bolt towards any noise it
+## could barely make out (0.1), so it was always the first robot on Juan.
+const MIN_AUDIBILITY: float = 0.25
 const RETREAT_TIME: float = 9.0
 const CLICK_INTERVAL: float = 0.085
 ## In a chase it rears up once Juan is this close: the last warning.
@@ -66,9 +71,11 @@ const SEARCH_LEG_TIME: float = 20.0
 func _init() -> void:
 	display_name = "SCUTTLE"
 	hostile_id = &"scuttle"
-	vision_range = 6.0
-	hearing = 1.1
-	catch_distance = 1.0
+	# Nearly blind: 4 m (3 m in the dark, 2 m if he crouches there).
+	vision_range = 4.0
+	hearing = 1.0
+	# Has to get right under him to strike, so a sidestep can save him.
+	catch_distance = 0.85
 	body_radius = 0.2
 	body_height = 0.42
 	eye_height = 0.3
@@ -190,7 +197,7 @@ func _on_found_hidden(at: Vector3) -> void:
 
 
 func _on_heard(origin: Vector3, _noise_type: StringName, audibility: float) -> void:
-	if state == State.CHASE or state == State.OFF or state == State.DOCKED or audibility < 0.1:
+	if state == State.CHASE or state == State.OFF or state == State.DOCKED or audibility < MIN_AUDIBILITY:
 		return
 	state = State.INVESTIGATE
 	_target = origin
