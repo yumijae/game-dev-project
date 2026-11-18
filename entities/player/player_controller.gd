@@ -454,10 +454,25 @@ func is_lit() -> bool:
 		return true
 	if not Campus.is_inside_footprint(global_position):
 		return true
+	# Only lamps on his own floor that he can actually see: a stairwell lamp
+	# on the floor above or below is close in a straight line, but the slab
+	# and the shaft walls keep its light off him.
+	const SIGHT_SLACK: float = 0.3
+	var my_floor: int = Campus.floor_from_y(global_position.y)
+	var eye: Vector3 = head.global_position
+	var space := get_world_3d().direct_space_state
 	for node: Node in get_tree().get_nodes_in_group(&"ambient_lights"):
 		var light := node as OmniLight3D
-		if light != null and light.visible \
-				and light.global_position.distance_to(head.global_position) <= light.omni_range * AMBIENT_LIGHT_FACTOR:
+		if light == null or not light.visible:
+			continue
+		var lamp: Vector3 = light.global_position
+		if lamp.distance_to(eye) > light.omni_range * AMBIENT_LIGHT_FACTOR:
+			continue
+		if Campus.floor_from_y(lamp.y) != my_floor:
+			continue
+		var query := PhysicsRayQueryParameters3D.create(eye, lamp, 1, [get_rid()])
+		var hit: Dictionary = space.intersect_ray(query)
+		if hit.is_empty() or (hit["position"] as Vector3).distance_to(lamp) <= SIGHT_SLACK:
 			return true
 	return false
 

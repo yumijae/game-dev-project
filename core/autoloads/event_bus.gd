@@ -87,13 +87,20 @@ signal jumpscare_started()
 # danger or tell the story do not ask; they just play.
 
 const CHATTER_GAP: float = 20.0
-var _last_chatter_ms: int = -1000000
+var _last_chatter_time: float = -INF
+
+## Seconds of play: stands still while the tree is paused (the pause menu),
+## unlike Time.get_ticks_msec(). Use it for gaps between optional lines.
+var game_time: float = 0.0
+
+
+func _process(delta: float) -> void:
+	game_time += delta
 
 
 ## True (and the budget is spent) when an optional line may play now.
 func take_chatter_turn(gap: float = CHATTER_GAP) -> bool:
-	var now: int = Time.get_ticks_msec()
-	if now - _last_chatter_ms < int(gap * 1000.0):
+	if game_time - _last_chatter_time < gap:
 		return false
-	_last_chatter_ms = now
+	_last_chatter_time = game_time
 	return true

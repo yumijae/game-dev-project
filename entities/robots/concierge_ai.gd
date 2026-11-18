@@ -80,8 +80,8 @@ var _patrol_timer: float = 0.0
 var _talk_timer: float = 8.0
 var _lose_timer: float = 0.0
 var _door_timer: float = 0.0
-var _last_door_line_ms: int = -1000000
-const DOOR_LINE_GAP_MS: int = 90000
+var _last_door_line_time: float = -INF
+const DOOR_LINE_GAP: float = 90.0
 var _look_timer: float = 0.0
 ## Heading for a SearchPlanner waypoint (not a random patrol point).
 var _searching: bool = false
@@ -443,9 +443,9 @@ func _drive(goal: Vector3, speed: float, delta: float) -> bool:
 		if _door_timer > 0.6 and _door_timer - delta <= 0.6:
 			_helper = RobotBase.call_for_help(door, self)
 			# Asks out loud only now and then; at every door it was constant.
-			var now: int = Time.get_ticks_msec()
-			if now - _last_door_line_ms > DOOR_LINE_GAP_MS and EventBus.take_chatter_turn(8.0):
-				_last_door_line_ms = now
+			var now: float = EventBus.game_time
+			if now - _last_door_line_time > DOOR_LINE_GAP and EventBus.take_chatter_turn(8.0):
+				_last_door_line_time = now
 				_say(LINE_HELP if _helper != null else LINE_DOOR)
 		var helped: bool = _helper != null and is_instance_valid(_helper) and _helper.help_door == door and _helper.is_helping()
 		if _door_timer >= (HELP_WAIT if helped else DOOR_WAIT):

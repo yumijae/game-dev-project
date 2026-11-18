@@ -714,8 +714,8 @@ func try_attack_player() -> bool:
 		return false
 	attack_cooldown = ATTACK_COOLDOWN
 	var fatal: bool = player.take_attack(self)
-	if not fatal and Time.get_ticks_msec() - _last_hit_line_ms > HIT_LINE_GAP_MS:
-		_last_hit_line_ms = Time.get_ticks_msec()
+	if not fatal and EventBus.game_time - _last_hit_line_time > HIT_LINE_GAP:
+		_last_hit_line_time = EventBus.game_time
 		taunt(&"hit", true)
 	_on_attack_landed(fatal)
 	return true
@@ -814,9 +814,10 @@ var _seen_for: float = 0.0
 var _unseen_for: float = 0.0
 var _lost_said: bool = true
 var _last_line: String = ""
-## The hit line plays at most this often (ms), whatever else is going on.
-const HIT_LINE_GAP_MS: int = 45000
-var _last_hit_line_ms: int = -1000000
+## The hit line plays at most this often (seconds of play, not counting the
+## pause menu), whatever else is going on.
+const HIT_LINE_GAP: float = 45.0
+var _last_hit_line_time: float = -INF
 
 
 ## Lines per moment: &"spotted", &"chase", &"lost", &"hiding", &"hit".

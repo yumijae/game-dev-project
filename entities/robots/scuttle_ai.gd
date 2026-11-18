@@ -313,7 +313,6 @@ func _squeeze_under(door: InteractableDoor, out: Vector3) -> void:
 	face_point(out, 1.0, 0.0)
 	# Now heading away from this door, so it is not "ahead" any more.
 	_desired_direction = (out - under).normalized()
-	nav.target_position = _target
 	SfxSynth.play_at(self, SfxSynth.scrape(), under + Vector3.UP * 0.1, -6.0, 1.8)
 	var t := create_tween()
 	t.tween_property(model, ^"scale", Vector3(1.15, 0.35, 1.15), 0.25)
@@ -322,7 +321,14 @@ func _squeeze_under(door: InteractableDoor, out: Vector3) -> void:
 	t.tween_property(model, ^"scale", Vector3.ONE, 0.2)
 	t.tween_callback(func() -> void:
 		body_shape.disabled = false
-		_squeezing = false)
+		_squeezing = false
+		_door_timer = 0.0
+		# Plan the route again from where it came out. The old one (and one
+		# asked for as the squeeze began) still starts behind the door: its
+		# next waypoint pointed back under it, so it dug its way back in, and
+		# out again, before it ever set off.
+		nav.target_position = _target
+		_repath_timer = REPATH_INTERVAL)
 
 
 # ------------------------------------------------------------------ movement
