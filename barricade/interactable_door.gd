@@ -1,7 +1,10 @@
 class_name InteractableDoor
 extends Node3D
-## A hinged room door: open, shut, or peeked under. There are no barricades -
-## nothing holds a door shut except the chained fire exits.
+## A hinged room door: open, shut, peeked under, or barricaded. With the
+## crowbar in hand Juan can hammer its claw into the gap under a shut door:
+## then nothing opens it from the far side, SCUTTLE cannot get under it and
+## only PROTOTYPE gets through, by battering it down. The fire exits are
+## chained.
 ##
 ## The node sits on the hinge; its child "Leaf" (AnimatableBody3D) is the door.
 ## The robots talk to it through can_robot_open(), shove() and can_slip_under().
@@ -14,6 +17,15 @@ const NOISE_CLOSE: float = 6.5
 const NOISE_RATTLE: float = 7.0
 const NOISE_SHOVE: float = 15.0
 const NOISE_BREAK: float = 22.0
+## Wedging the crowbar in (and working it free) scrapes and clanks: heard
+## this far, once a second.
+const BARRICADE_TIME: float = 4.0
+const UNBARRICADE_TIME: float = 2.0
+const NOISE_BARRICADE: float = 7.0
+## A barricaded door takes this much more battering before the crowbar
+## springs out, and every blow on it is louder.
+const BARRICADE_HEALTH: float = 120.0
+const NOISE_SHOVE_BARRICADED: float = 20.0
 const GAP_HEIGHT: float = 0.09
 ## Collision layers of the leaf. Shut, it is a door (8) to everyone. Open it
 ## stands straight out from the wall - and the walking mesh the robots plan
@@ -39,6 +51,13 @@ var is_broken: bool = false
 var health: float = MAX_HEALTH
 ## While a "voice behind the door" hallucination plays, nothing is really outside.
 var hallucination_time_left: float = 0.0
+## A crowbar is wedged in the gap under the door, from the `barricade_side` side.
+var is_barricaded: bool = false
+var barricade_side: float = 1.0
+## What the crowbar can still take before it springs out.
+var barricade_health: float = 0.0
+
+var _crowbar: Node3D = null
 
 var _tween: Tween = null
 var _leaf: Node3D = null
@@ -112,14 +131,21 @@ func is_passable() -> bool:
 
 # --------------------------------------------------------------- interactions
 
-func get_interactions(_player: PlayerController) -> Array[Dictionary]:
+func get_interactions(player: PlayerController) -> Array[Dictionary]:
 	if permanently_locked:
 		return [{"id": &"rattle", "label": "%s - chained shut" % door_label}]
 	if is_broken:
 		return []
 	if is_open:
 		return [{"id": &"close", "label": "Close door"}]
-	return [{"id": &"open", "label": "Open door"}, {"id": &"peek", "label": "Peek under the door"}]
+	if is_barricaded:
+		if which_side(player.global_position) != barricade_side:
+			return [{"id": &"rattle", "label": "%s - it won't budge" % door_label}, {"id": &"peek", "label": "Peek under the door"}]
+		return [{"id": &"unbarricade", "label": "Remove barricade"}, {"id": &"peek", "label": "Peek under the door"}]
+	var actions: Array[Dictionary] = [{"id": &"open", "label": "Open door"}, {"id": &"peek", "label": "Peek under the door"}]
+	if player.inventory.has_in_hands(ItemDB.CROWBAR):
+		actions.append({"id": &"barricade", "label": "Barricade the door (wedge the crowbar under it)"})
+	return actions
 
 
 func interact(player: PlayerController, action_id: StringName) -> void:
@@ -132,6 +158,10 @@ func interact(player: PlayerController, action_id: StringName) -> void:
 			peek_under_door(player)
 		&"rattle":
 			_rattle(player)
+		&"barricade":
+			_begin_barricade(player)
+		&"unbarricade":
+			_begin_unbarricade(player)
 
 
 ## Lowers the camera to the gap under the door and reports what stands outside:
@@ -167,7 +197,7 @@ func _describe_far_side(side: float) -> String:
 func set_open(open: bool, by: Node = null) -> void:
 	if is_broken or open == is_open:
 		return
-	if open and permanently_locked:
+	if open and (permanently_locked or is_barricaded):
 		return
 	is_open = open
 	_update_leaf_collision()
@@ -189,12 +219,111 @@ func _rattle(by: Node = null) -> void:
 	SfxSynth.play_at(self, SfxSynth.clatter(), get_center() + Vector3.UP, -12.0, 0.7)
 
 
+# ----------------------------------------------------------------- barricade
+
+## Juan hammers the crowbar's claw into the gap under the door: a few noisy
+## seconds, the bar sliding in as he works.
+func _begin_barricade(player: PlayerController) -> void:
+	var side: float = which_side(player.global_position)
+	var started: bool = player.start_channel("Wedging the crowbar under the door", BARRICADE_TIME, func() -> void:
+		_finish_barricade(player, side), {
+		"noise_type": &"barricade", "noise_radius": NOISE_BARRICADE, "noise_interval": 1.0,
+		# A robot opening (or bursting) the door stops him.
+		"on_tick": func(_delta: float) -> void:
+			if is_passable():
+				player.cancel_channel(),
+		"on_progress": func(ratio: float) -> void: _show_crowbar(side, ratio),
+		"on_cancel": func(_elapsed: float) -> void: _hide_crowbar(),
+	})
+	if started:
+		_show_crowbar(side, 0.0)
+
+
+func _finish_barricade(player: PlayerController, side: float) -> void:
+	# The door was opened, burst or the bar dropped meanwhile.
+	if is_open or is_broken or not player.inventory.has_in_hands(ItemDB.CROWBAR):
+		_hide_crowbar()
+		return
+	player.inventory.remove_item(ItemDB.CROWBAR, 1)
+	set_barricaded(true, side)
+	SfxSynth.play_at(self, SfxSynth.clatter(), get_center() + Vector3.UP, -8.0, 0.6)
+	EventBus.ui_notification.emit("The crowbar is jammed in under the door. Nothing opens it from outside.", 3.0)
+
+
+func _begin_unbarricade(player: PlayerController) -> void:
+	player.start_channel("Working the crowbar free", UNBARRICADE_TIME, func() -> void:
+		_finish_unbarricade(player), {
+		"noise_type": &"barricade", "noise_radius": NOISE_BARRICADE * 0.6, "noise_interval": 1.0,
+		"on_progress": func(ratio: float) -> void:
+			if is_barricaded:
+				_show_crowbar(barricade_side, 1.0 - ratio),
+		"on_cancel": func(_elapsed: float) -> void:
+			if is_barricaded:
+				_show_crowbar(barricade_side, 1.0),
+	})
+
+
+func _finish_unbarricade(player: PlayerController) -> void:
+	if not is_barricaded:
+		return
+	set_barricaded(false)
+	if player.inventory.add_item(ItemDB.CROWBAR, 1) > 0:
+		player.drop_item_in_world(ItemDB.CROWBAR, 1)
+
+
+## Puts the barricade up (held from `side`) or takes it down. Taking it down
+## leaves no crowbar behind; callers hand it back or drop it.
+func set_barricaded(on: bool, side: float = 1.0) -> void:
+	if on == is_barricaded or (on and (is_open or is_broken or permanently_locked)):
+		return
+	is_barricaded = on
+	barricade_side = side
+	barricade_health = BARRICADE_HEALTH if on else 0.0
+	if on:
+		_show_crowbar(side, 1.0)
+	else:
+		_hide_crowbar()
+	EventBus.door_state_changed.emit(self)
+
+
+## Battered loose: the crowbar springs out and rings off the floor on Juan's side.
+func _barricade_gives_way() -> void:
+	var side: float = barricade_side
+	set_barricaded(false)
+	SfxSynth.play_at(self, SfxSynth.clatter(), get_center() + Vector3.UP * 0.3, 0.0, 0.8)
+	var scene: Node = get_tree().current_scene
+	if scene != null:
+		WorldItem.spawn(scene, ItemDB.CROWBAR, 1, get_side_position(side, 0.8))
+
+
+## The crowbar lying on the floor on `side`, square to the door, its claw
+## `ratio` of the way from loose (0) to driven into the gap (1).
+func _show_crowbar(side: float, ratio: float) -> void:
+	if _crowbar == null:
+		_crowbar = ItemModel.build(ItemDB.CROWBAR)
+		_crowbar.name = "BarricadeCrowbar"
+		add_child(_crowbar)
+	# Local frame of the shut door: x along it (hinge to latch), z out of it.
+	# The model lies along its own x with the claw at -x: point -x at the door.
+	var out := Vector3(0.0, 0.0, _local_room_sign() * side)
+	_crowbar.basis = Basis(out, Vector3.UP, out.cross(Vector3.UP))
+	var half: float = ItemDB.get_size(ItemDB.CROWBAR).x * 0.5
+	var reach: float = half - 0.06 + (1.0 - clampf(ratio, 0.0, 1.0)) * 0.3
+	_crowbar.position = Vector3(door_width - 0.15, 0.0, 0.0) + out * reach
+
+
+func _hide_crowbar() -> void:
+	if _crowbar != null:
+		_crowbar.queue_free()
+		_crowbar = null
+
+
 # ------------------------------------------------------------------ Robot API
 
 ## True when something with hands can simply turn the handle (any shut door
-## but the chained fire exits).
+## but the chained fire exits and a barricaded one).
 func can_robot_open() -> bool:
-	return not is_passable() and not permanently_locked
+	return not is_passable() and not permanently_locked and not is_barricaded
 
 
 ## How long it takes to turn the handle.
@@ -202,20 +331,29 @@ func get_handle_delay() -> float:
 	return HANDLE_TURN_TIME
 
 
-## SCUTTLE can crawl under any shut door except the fire exits.
+## SCUTTLE can crawl under any shut door except the fire exits and a
+## barricaded one: the crowbar's claw is jammed in the gap.
 func can_slip_under() -> bool:
-	return not permanently_locked
+	return not permanently_locked and not is_barricaded
 
 
-## One heavy blow; the door bursts once its health is gone. Returns true when
-## the door has given way. (Nothing holds a door shut any more, so robots
-## open rather than batter; kept for anything that does hit one.)
+## One heavy blow; PROTOTYPE batters a door it cannot open (a barricaded
+## one). The blows go into the barricade first - until the crowbar springs
+## out - then into the door, which bursts once its health is gone. Returns
+## true when the door has given way.
 func shove(force: float) -> bool:
 	if is_passable() or permanently_locked:
 		return is_passable()
-	NoiseManager.emit_noise(get_center(), NOISE_SHOVE, &"door_bang", self)
-	SfxSynth.play_at(self, SfxSynth.thud(), get_center() + Vector3.UP, 0.0)
+	NoiseManager.emit_noise(get_center(), NOISE_SHOVE_BARRICADED if is_barricaded else NOISE_SHOVE, &"door_bang", self)
+	SfxSynth.play_at(self, SfxSynth.thud(), get_center() + Vector3.UP, 3.0 if is_barricaded else 0.0)
 	_shake()
+	if is_barricaded:
+		barricade_health -= force
+		if barricade_health <= 0.0:
+			force = -barricade_health
+			_barricade_gives_way()
+		else:
+			return false
 	health -= force
 	if health <= 0.0:
 		break_open()
@@ -226,6 +364,8 @@ func shove(force: float) -> bool:
 func break_open() -> void:
 	if is_broken:
 		return
+	if is_barricaded:
+		_barricade_gives_way()
 	is_broken = true
 	is_open = true
 	_update_leaf_collision()

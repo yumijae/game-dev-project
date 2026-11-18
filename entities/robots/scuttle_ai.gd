@@ -5,9 +5,11 @@ extends RobotBase
 ## very good hearing.
 ##
 ##   - Goes anywhere, stairs included.
-##   - Closed doors don't stop it: it flattens and squeezes through the gap
-##     underneath - unless something heavy is pushed against the bottom of the
-##     door; nothing keeps it out.
+##   - Closed doors don't stop it: it scratches at the gap underneath for a
+##     couple of seconds, then flattens and squeezes through. A barricaded
+##     door (Juan's crowbar jammed in the gap), or one with no room to come
+##     out on the far side, turns it away: it scrapes at it a moment, then
+##     gives up and goes elsewhere.
 ##   - Hunts by sound. It only sees Juan within a few metres.
 ##   - Its skittering clicks give it away before it arrives.
 ##   - The model is one rigid piece (legs included), so the whole body is
@@ -20,12 +22,12 @@ enum State { DOCKED, ROAM, INVESTIGATE, CHASE, OFF }
 const ROAM_SPEED: float = 1.8
 const INVESTIGATE_SPEED: float = 2.5
 ## 3.2 m/s (4.0 by 5 AM): just under Juan's walk early on, well short of his
-## sprint late. Nothing else keeps it out (doors, stairs), so outrunning it
+## sprint late. Stairs and plain doors don't keep it out, so outrunning it
 ## has to be possible: at 3.7 (4.6 late) it caught a walking Juan from
 ## anywhere and only a long sprint shook it.
 const CHASE_SPEED: float = 3.2
 ## How long it scratches at a door gap before it squeezes under: a warning
-## you can hear, and a moment to get a heavy prop across the gap.
+## you can hear, and a last moment to finish barricading the door.
 const DIG_TIME: float = 2.6
 const SQUEEZE_TIME: float = 1.3
 ## Out of sight this long and it stops chasing and goes to look instead.
