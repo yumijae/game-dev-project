@@ -12,6 +12,9 @@ extends CharacterBody3D
 ##   LMB use held item - RMB cancel - R switch hand - X drop - G stifle a gasp
 ##   Esc pause (PauseMenu)
 
+## E acted on something (a door, a fixture, a pickup): the arms reach for it.
+signal interacted(target: Node)
+
 const STAND_HEIGHT: float = 1.75
 const CROUCH_HEIGHT: float = 1.0
 ## 128: open door leaves (InteractableDoor.LAYER_OPEN_LEAF), so an open door
@@ -55,6 +58,8 @@ var inventory: InventoryComponent = null
 var phone: PlayerPhoneUI = null
 ## The CCTV app (V): school security camera feeds on the phone.
 var cctv: CctvApp = null
+## His own arms and whatever he holds, drawn over the view.
+var viewmodel: Viewmodel = null
 ## The robot-in-your-face moment when one catches him (and a jolt on a hit).
 var jumpscare: Jumpscare = null
 ## A full-screen panel (the combination dial) that has the keys and mouse:
@@ -127,6 +132,7 @@ func _ready() -> void:
 	_peek_camera.top_level = true
 	_peek_camera.near = 0.01
 	_peek_camera.fov = 70.0
+	_peek_camera.cull_mask &= ~Viewmodel.LAYER
 	add_child(_peek_camera)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	camera.fov = GameSettings.fov
@@ -151,6 +157,10 @@ func _build_components() -> void:
 	cctv.setup(self)
 	add_child(cctv)
 	phone.attach_screen(cctv)
+	viewmodel = Viewmodel.new()
+	viewmodel.name = "Viewmodel"
+	viewmodel.setup(self)
+	camera.add_child(viewmodel)
 	jumpscare = Jumpscare.new()
 	jumpscare.name = "Jumpscare"
 	jumpscare.setup(self)

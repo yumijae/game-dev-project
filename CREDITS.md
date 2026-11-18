@@ -65,6 +65,11 @@
   Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).
   Used as: PROTOTYPE robot; rescaled, procedural walk/run added (entities/robots/prototype_ai.gd).
 
+- **Universal Animation Library (Standard)** by Quaternius
+  https://quaternius.com
+  Licensed under CC0 1.0 (https://creativecommons.org/publicdomain/zero/1.0/).
+  Used as: Juan's first-person arms and their animations (entities/player/viewmodel.gd).
+
 - Furniture and props from **Poly Haven** (https://polyhaven.com), CC0.
 
 ## Textures

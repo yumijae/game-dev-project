@@ -131,6 +131,7 @@ func _build_game(page: VBoxContainer) -> void:
 		func(value: float) -> void: GameSettings.set_value(&"fov", value))
 	_toggle(page, "Jumpscares", GameSettings.jumpscares, func(on: bool) -> void: GameSettings.set_value(&"jumpscares", on))
 	_toggle(page, "Robot taunts", GameSettings.taunts, func(on: bool) -> void: GameSettings.set_value(&"taunts", on))
+	_toggle(page, "Show arms", GameSettings.show_arms, func(on: bool) -> void: GameSettings.set_value(&"show_arms", on))
 
 
 func _build_audio(page: VBoxContainer) -> void:
